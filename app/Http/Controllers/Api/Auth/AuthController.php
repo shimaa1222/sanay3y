@@ -15,6 +15,8 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Notification;
 use App\Notifications\NewCraftsmanRegistrationNotification;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Mail;
 class AuthController extends Controller
 {
     /**
@@ -121,7 +123,24 @@ if ($validator->fails()) {
         'national_id_back'  => 'required|file|mimes:jpg,jpeg,png|max:5120',
         'craft_ids'  => 'required|array|min:1',
         'craft_ids.*'=> 'exists:crafts,id',
+        'verified_token' => 'required|string'
     ]);
+    $verifiedEmail = Cache::get(
+    "craftsman_registration:{$request->verified_token}"
+);
+
+if (!$verifiedEmail) {
+    return response()->json([
+        'message' => 'Email verification expired'
+    ], 422);
+}
+
+if ($verifiedEmail !== $request->email) {
+    return response()->json([
+        'message' => 'Email verification mismatch'
+    ], 422);
+}
+
     if($validator->fails()){
         return response()->json([
             'message' => 'فشل التحقق من البيانات',
@@ -132,6 +151,7 @@ if ($validator->fails()) {
 
     $frontPath = $request->file('national_id_front')->store('national_ids', 'public');
     $backPath  = $request->file('national_id_back')->store('national_ids', 'public');
+
 
     $craftsman = Craftsman::create([
         'user_id' => null,
@@ -145,6 +165,7 @@ if ($validator->fails()) {
         'status' => 'pending',
     ]);
 
+
     foreach ($request->craft_ids as $index => $craftId) {
         DB::table('craftsman_crafts')->insert([
             'craftsman_id' => $craftsman->id,
@@ -154,6 +175,11 @@ if ($validator->fails()) {
             'updated_at' => now(),
         ]);
     }
+
+Cache::forget(
+    "craftsman_registration:{$request->verified_token}"
+);
+
 
     return response()->json([
         'message' => 'تم إرسال الطلب بنجاح',

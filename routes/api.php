@@ -63,7 +63,7 @@ Route::prefix('auth')->group(function () {
 
   // تسجيل دخول موحد للجميع (عميل / حرفي / أدمن)
     Route::post('/login', [AuthController::class, 'login']);//finish
-    Route::post('/admin/login', [AdminController::class, 'login']);
+    // Route::post('/admin/login', [AdminController::class, 'login']);
 
 ////////////////////Not yet test///////////////////////////
 
@@ -351,10 +351,7 @@ Route::middleware(["auth:sanctum","role:craftsman,admin"])->prefix('craftsman')-
         Route::get('/service-posts', [ServicePostController::class, 'index']);//finish list of all service posts with pagination and search
         Route::post('/service-posts/{id}/respond', [ServicePostController::class, 'respond']);//finish الحرفي يرد على منشور خدمة معين بعرض سعر ومدة تنفيذ
         // Site Settings
-Route::get(
-    '/settings',
-    [AdminSettingsController::class, 'index']
-);
+Route::get('/settings',[AdminSettingsController::class, 'index']);
 
 Route::put(
     '/settings',
@@ -418,4 +415,6 @@ Route::middleware(["auth:sanctum","role:admin"])->prefix('admin')->group(functio
 
     });
 
-});
+ });
+
+

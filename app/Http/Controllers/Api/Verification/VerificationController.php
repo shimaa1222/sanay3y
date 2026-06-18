@@ -167,7 +167,7 @@ class VerificationController extends Controller
         $validator = Validator::make($request->all(), [
     'identifier' => 'required|string|max:255',
     'type'       => 'required|in:email,phone',
-    'purpose'    => 'required|in:login,register,password_reset,phone_verification,email_verification',
+    'purpose'    => 'required|in:login,register,password_reset,phone_verification,email_verification,craftsman_registration',
 ], [
     'identifier.required' => 'البريد الإلكتروني أو رقم الهاتف مطلوب',
     'type.required'       => 'نوع الإرسال مطلوب',
@@ -175,7 +175,6 @@ class VerificationController extends Controller
     'purpose.required'    => 'الغرض من الكود مطلوب',
     'purpose.in'          => 'الغرض من الكود غير صالح',
 ]);
-
 if ($validator->fails()) {
     return response()->json([
         'message' => 'فشل التحقق من البيانات',
@@ -298,7 +297,7 @@ if ($validator->fails()) {
     $validator = Validator::make($request->all(), [
         'identifier' => 'required|string|max:255',
         'otp'        => 'required|string|size:6',
-        'purpose'    => 'required|in:login,register,password_reset,phone_verification,email_verification',
+        'purpose'    => 'required|in:login,register,password_reset,phone_verification,email_verification,craftsman_registration',
     ], [
         'identifier.required' => 'الإيميل أو رقم الهاتف مطلوب',
         'otp.required'        => 'كود التحقق مطلوب',
@@ -362,6 +361,18 @@ if ($request->purpose === 'password_reset') {
     );
 
     $response['reset_token'] = $token;
+}
+if ($request->purpose === 'craftsman_registration') {
+
+    $token = Str::random(64);
+
+    Cache::put(
+        "craftsman_registration:{$token}",
+        $request->identifier,
+        now()->addMinutes(30)
+    );
+
+    $response['verified_token'] = $token;
 }
 
 return response()->json($response);
