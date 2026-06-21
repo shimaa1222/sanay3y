@@ -53,7 +53,11 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 
-
+Route::get('/api/test', function () {
+    return response()->json([
+        'message' => 'API Works'
+    ]);
+});
 Route::prefix('auth')->group(function () {
 
 
