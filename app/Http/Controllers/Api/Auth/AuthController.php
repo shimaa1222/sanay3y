@@ -110,7 +110,7 @@ $user = User::create([
     'password'          => Hash::make($request->password),
     'role'              => 'client',
     'phone'             => $request->phone,
-    'email_verified_at' => null,
+    'email_verified_at' => now(),
     'is_active'         => true,
 ]);
 Cache::forget(
