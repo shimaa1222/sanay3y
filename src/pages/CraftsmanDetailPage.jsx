@@ -5,7 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import CraftsmanMap from '../components/Map/CraftsmanMap';
-import AdvancedReviewForm from '../components/Reviews/AdvancedReviewForm';
+import AddReviewModal from '../components/Reviews/AddReviewModal';
 import { 
   MapPin, Star, Clock, Wrench, Phone, MessageCircle,
   CheckCircle, Award, Calendar, ArrowLeft,
@@ -27,7 +27,11 @@ const CraftsmanDetailPage = () => {
   const [isFavorite, setIsFavorite] = useState(false);
   const [portfolioImages, setPortfolioImages] = useState([]);
   const [selectedImage, setSelectedImage] = useState(null);
-  const [showReviewForm, setShowReviewForm] = useState(false);
+
+  // ✅ State لمودال التقييم
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState(null);
+  const [userBookings, setUserBookings] = useState([]);
 
   // ========== Language ==========
   useEffect(() => {
@@ -43,6 +47,7 @@ const CraftsmanDetailPage = () => {
     const loadCraftsman = async () => {
       setLoading(true);
       try {
+        // ✅ جلب بيانات الحرفي
         const data = await api.getCraftsman(id);
         const c = data.craftsman || data;
         
@@ -65,8 +70,30 @@ const CraftsmanDetailPage = () => {
         };
         
         setCraftsman(craftsmanWithLocation);
-        setReviews(c.reviews || []);
+        
+        // ✅ جلب التقييمات الخاصة بالحرفي من API
+        try {
+          const reviewsData = await api.getCraftsmanReviews(id);
+          setReviews(reviewsData.reviews || reviewsData || []);
+        } catch (reviewError) {
+          console.warn('⚠️ Could not load reviews:', reviewError);
+          setReviews(c.reviews || []);
+        }
+        
         setPortfolioImages(c.portfolio || []);
+        
+        // ✅ جلب حجوزات المستخدم (للتقييم)
+        if (isAuthenticated) {
+          try {
+            const bookingsData = await api.getMyBookings('all');
+            const userCompletedBookings = (bookingsData.bookings?.data || [])
+              .filter(b => b.craftsman_id === parseInt(id) && b.status === 'completed' && !b.has_review);
+            setUserBookings(userCompletedBookings);
+          } catch (bookingError) {
+            console.warn('⚠️ Could not load user bookings:', bookingError);
+          }
+        }
+        
       } catch (error) {
         console.warn('⚠️ Using fallback craftsman data:', error);
         setCraftsman({
@@ -84,8 +111,6 @@ const CraftsmanDetailPage = () => {
           bio: 'نجار محترف خبرة 15 سنة في جميع أعمال النجارة',
           skills: ['نجارة', 'صيانة', 'تركيب', 'تصليح'],
           yearsExperience: 15,
-          reviews: [],
-          portfolio: [],
         });
         setReviews([]);
         setPortfolioImages([]);
@@ -93,7 +118,7 @@ const CraftsmanDetailPage = () => {
       setLoading(false);
     };
     loadCraftsman();
-  }, [id]);
+  }, [id, isAuthenticated]);
 
   // ========== Translations ==========
   const t = useMemo(() => ({
@@ -126,20 +151,27 @@ const CraftsmanDetailPage = () => {
     },
     addReview: lang === 'ar' ? 'أضف تقييمك' : 'Add Review',
     loginToReview: lang === 'ar' ? 'سجل الدخول لإضافة تقييم' : 'Login to add review',
+    rateService: lang === 'ar' ? 'قيّم الخدمة' : 'Rate Service',
   }), [lang]);
 
   // ========== Handlers ==========
   const handleReviewSuccess = (newReview) => {
+    // ✅ تحديث قائمة التقييمات
     setReviews(prev => [newReview, ...prev]);
-    setShowReviewForm(false);
+    setShowReviewModal(false);
+    // ✅ تحديث حجوزات المستخدم
+    setUserBookings(prev => prev.filter(b => b.id !== selectedBooking?.id));
   };
 
-  const handleReviewError = (error) => {
-    console.error('Review error:', error);
+  const handleReviewClose = () => {
+    setShowReviewModal(false);
+    setSelectedBooking(null);
   };
 
-  const handleReviewCancel = () => {
-    setShowReviewForm(false);
+  // ✅ فتح مودال التقييم
+  const openReviewModal = (booking) => {
+    setSelectedBooking(booking);
+    setShowReviewModal(true);
   };
 
   // ========== Loading State ==========
@@ -605,31 +637,46 @@ const CraftsmanDetailPage = () => {
                     {t.reviews} ({reviews.length})
                   </h2>
                   
-                  {/* ✅ زر إضافة تقييم */}
-                  {isAuthenticated ? (
-                    <button
-                      onClick={() => setShowReviewForm(!showReviewForm)}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '8px 16px',
-                        borderRadius: '10px',
-                        border: 'none',
-                        background: '#3b82f6',
-                        color: 'white',
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                        fontSize: '0.85rem',
-                        fontFamily: "'Cairo', sans-serif",
-                        transition: 'all 0.3s ease',
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                      onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                    >
-                      <PlusCircle size={16} />
-                      {t.addReview}
-                    </button>
+                  {/* ✅ زر إضافة تقييم - يظهر للمستخدمين المسجلين الذين لديهم حجوزات مكتملة */}
+                  {isAuthenticated && userBookings.length > 0 ? (
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {userBookings.map((booking) => (
+                        <button
+                          key={booking.id}
+                          onClick={() => openReviewModal(booking)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '8px 16px',
+                            borderRadius: '10px',
+                            border: 'none',
+                            background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            fontSize: '0.85rem',
+                            fontFamily: "'Cairo', sans-serif",
+                            transition: 'all 0.3s ease',
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                        >
+                          <PlusCircle size={16} />
+                          {t.rateService}
+                        </button>
+                      ))}
+                    </div>
+                  ) : isAuthenticated && userBookings.length === 0 ? (
+                    <span style={{
+                      fontSize: '0.85rem',
+                      color: textSecondary,
+                      padding: '8px 16px',
+                      borderRadius: '10px',
+                      border: `1px solid ${borderColor}`,
+                    }}>
+                      {lang === 'ar' ? 'ليس لديك حجوزات مكتملة لتقييمها' : 'No completed bookings to review'}
+                    </span>
                   ) : (
                     <Link
                       to="/login"
@@ -654,49 +701,79 @@ const CraftsmanDetailPage = () => {
                   )}
                 </div>
 
-                {/* ✅ نموذج إضافة تقييم */}
-                {showReviewForm && isAuthenticated && (
-                  <div style={{ marginBottom: '20px' }}>
-                    <AdvancedReviewForm
-                      craftsmanId={craftsman.id}
-                      onSuccess={handleReviewSuccess}
-                      onError={handleReviewError}
-                      onCancel={handleReviewCancel}
-                    />
-                  </div>
-                )}
-
                 {/* ✅ قائمة التقييمات */}
                 {reviews.length > 0 ? (
-                  reviews.map((r, i) => (
-                    <div key={r.id || i} style={{ 
-                      padding: '16px 0', 
-                      borderBottom: i < reviews.length - 1 ? `1px solid ${borderColor}` : 'none' 
-                    }}>
-                      <div style={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between', 
-                        marginBottom: '8px' 
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {reviews.map((r, i) => (
+                      <div key={r.id || i} style={{ 
+                        padding: '16px', 
+                        borderRadius: '12px',
+                        background: darkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc',
+                        border: `1px solid ${borderColor}`,
                       }}>
-                        <strong style={{ color: textColor }}>
-                          {r.client?.name || r.client_email?.split('@')[0] || (lang === 'ar' ? 'عميل' : 'Customer')}
-                        </strong>
-                        <span style={{ display: 'flex', gap: '2px' }}>
-                          {Array.from({ length: 5 }).map((_, j) => (
-                            <Star 
-                              key={j} 
-                              size={14} 
-                              fill={j < (r.rating || 5) ? '#f59e0b' : 'none'} 
-                              color={j < (r.rating || 5) ? '#f59e0b' : '#cbd5e1'} 
-                            />
-                          ))}
-                        </span>
+                        <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center',
+                          marginBottom: '8px' 
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '50%',
+                              background: '#3b82f6',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: 'white',
+                              fontWeight: 700,
+                              fontSize: '0.8rem',
+                            }}>
+                              {r.client?.name?.[0] || r.client?.first_name?.[0] || 'م'}
+                            </div>
+                            <strong style={{ color: textColor }}>
+                              {r.client?.name || `${r.client?.first_name || ''} ${r.client?.last_name || ''}`.trim() || (lang === 'ar' ? 'عميل' : 'Customer')}
+                            </strong>
+                          </div>
+                          <span style={{ display: 'flex', gap: '2px' }}>
+                            {Array.from({ length: 5 }).map((_, j) => (
+                              <Star 
+                                key={j} 
+                                size={14} 
+                                fill={j < (r.rating || 5) ? '#f59e0b' : 'none'} 
+                                color={j < (r.rating || 5) ? '#f59e0b' : '#cbd5e1'} 
+                              />
+                            ))}
+                          </span>
+                        </div>
+                        {r.comment && (
+                          <p style={{ 
+                            color: textSecondary, 
+                            fontSize: '0.9rem', 
+                            lineHeight: 1.7,
+                            margin: '4px 0 8px 0',
+                          }}>
+                            "{r.comment}"
+                          </p>
+                        )}
+                        <div style={{ 
+                          fontSize: '0.7rem', 
+                          color: textSecondary,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}>
+                          <Calendar size={12} />
+                          {new Date(r.created_at).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </div>
                       </div>
-                      <p style={{ color: textSecondary, fontSize: '0.9rem', lineHeight: 1.7 }}>
-                        "{r.comment}"
-                      </p>
-                    </div>
-                  ))
+                    ))}
+                  </div>
                 ) : (
                   <div style={{ 
                     textAlign: 'center', 
@@ -705,15 +782,15 @@ const CraftsmanDetailPage = () => {
                   }}>
                     <Star size={48} style={{ opacity: 0.3, marginBottom: '12px' }} />
                     <p>{t.noReviews}</p>
-                    {isAuthenticated && (
+                    {isAuthenticated && userBookings.length > 0 && (
                       <button
-                        onClick={() => setShowReviewForm(true)}
+                        onClick={() => openReviewModal(userBookings[0])}
                         style={{
                           marginTop: '12px',
                           padding: '8px 20px',
                           borderRadius: '10px',
                           border: 'none',
-                          background: '#3b82f6',
+                          background: 'linear-gradient(135deg, #f59e0b, #d97706)',
                           color: 'white',
                           cursor: 'pointer',
                           fontWeight: 600,
@@ -969,6 +1046,19 @@ const CraftsmanDetailPage = () => {
           </button>
         </div>
       )}
+
+      {/* ✅ مودال إضافة التقييم */}
+      <AddReviewModal
+        isOpen={showReviewModal}
+        onClose={handleReviewClose}
+        bookingId={selectedBooking?.id}
+        craftsmanName={
+          selectedBooking?.craftsman 
+            ? `${selectedBooking.craftsman.first_name || ''} ${selectedBooking.craftsman.last_name || ''}`.trim()
+            : fullName
+        }
+        onSuccess={handleReviewSuccess}
+      />
     </div>
   );
 };

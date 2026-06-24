@@ -24,12 +24,6 @@ const egyptianCities = [
   'دمياط', 'مرسى مطروح', 'العاشر من رمضان'
 ];
 
-const serviceTypes = [
-  'سباكة', 'كهرباء', 'نجارة', 'دهان', 'تكييف وتبريد',
-  'بناء وتشييد', 'حدادة', 'تنظيف', 'مكافحة حشرات',
-  'نقل أثاث', 'صيانة أجهزة', 'تركيب سيراميك', 'أخرى'
-];
-
 const RequestServicePage = () => {
   const navigate = useNavigate();
   const { darkMode } = useTheme();
@@ -39,6 +33,10 @@ const RequestServicePage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  
+  // ✅ جلب المهن من Backend
+  const [crafts, setCrafts] = useState([]);
+  const [loadingCrafts, setLoadingCrafts] = useState(true);
 
   const [formData, setFormData] = useState({
     serviceType: '',
@@ -54,6 +52,7 @@ const RequestServicePage = () => {
     phone: '',
     email: user?.email || '',
     urgency: 'medium',
+    craft_id: '',
   });
 
   const [images, setImages] = useState([]);
@@ -68,14 +67,45 @@ const RequestServicePage = () => {
     return () => window.removeEventListener('languagechange', handleLanguageChange);
   }, []);
 
+  // ✅ جلب المهن من Backend
+  useEffect(() => {
+    const loadCrafts = async () => {
+      setLoadingCrafts(true);
+      try {
+        const data = await api.getCrafts();
+        if (data.crafts && data.crafts.length > 0) {
+          setCrafts(data.crafts);
+          console.log('✅ Crafts loaded from backend:', data.crafts.length);
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to fetch crafts:', error);
+      } finally {
+        setLoadingCrafts(false);
+      }
+    };
+    loadCrafts();
+  }, []);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     
-    if (name === 'serviceType' && value === 'أخرى') {
-      setShowCustomService(true);
-      setFormData(prev => ({ ...prev, serviceType: '', customService: '' }));
-    } else if (name === 'serviceType') {
-      setShowCustomService(false);
+    // ✅ معالجة اختيار المهنة
+    if (name === 'serviceType') {
+      // البحث عن المهنة المختارة
+      const selectedCraft = crafts.find(c => c.name === value);
+      if (selectedCraft) {
+        setFormData(prev => ({ 
+          ...prev, 
+          serviceType: value,
+          craft_id: selectedCraft.id 
+        }));
+      } else if (value === 'أخرى') {
+        setShowCustomService(true);
+        setFormData(prev => ({ ...prev, serviceType: '', craft_id: '' }));
+      } else {
+        setFormData(prev => ({ ...prev, serviceType: value, craft_id: '' }));
+      }
+    } else if (name === 'customService') {
       setFormData(prev => ({ ...prev, [name]: value }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
@@ -93,6 +123,8 @@ const RequestServicePage = () => {
       const service = showCustomService ? formData.customService : formData.serviceType;
       if (!service.trim()) return t.selectService;
       if (!formData.description.trim()) return t.enterDescription;
+      // ✅ التحقق من وجود craft_id
+      if (!showCustomService && !formData.craft_id) return t.selectService;
       return '';
     }
     if (stepNum === 2) {
@@ -144,58 +176,66 @@ const RequestServicePage = () => {
       formDataToSend.append('title', service);
       formDataToSend.append('description', formData.description);
       formDataToSend.append('city', formData.city);
-      formDataToSend.append('location', `${formData.city} - ${formData.district || ''}`);
+      formDataToSend.append('location', formData.address || formData.district || formData.city);
       formDataToSend.append('budget_from', formData.budget || 0);
       formDataToSend.append('budget_to', formData.budget || 0);
       formDataToSend.append('urgency', formData.urgency || 'medium');
-      formDataToSend.append('craft_id', 1); // مؤقتاً
       
-      if (formData.district) formDataToSend.append('custom_location', formData.district);
+      // ✅ إرسال craft_id الصحيح من Backend
+      if (showCustomService) {
+        formDataToSend.append('custom_craft', formData.customService);
+      } else if (formData.craft_id) {
+        formDataToSend.append('craft_id', formData.craft_id);
+      } else {
+        // ✅ Fallback: البحث عن craft_id من الاسم
+        const foundCraft = crafts.find(c => c.name === formData.serviceType);
+        if (foundCraft) {
+          formDataToSend.append('craft_id', foundCraft.id);
+        }
+      }
+      
+      if (formData.district) formDataToSend.append('district', formData.district);
+      if (formData.date) formDataToSend.append('needed_by', formData.date);
 
       // ✅ إضافة الصور
       images.forEach((image) => {
         formDataToSend.append('images[]', image);
       });
 
+      console.log('📤 Sending service post...');
+      console.log('📋 craft_id:', formData.craft_id || 'custom');
+      
       const data = await api.createServicePost(formDataToSend);
+      console.log('✅ Service post created:', data);
 
       setSuccess(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
     } catch (error) {
-      console.warn('⚠️ Service post error, using fallback:', error);
+      console.error('❌ Service post error:', error);
       
-      // ✅ Fallback - حفظ في localStorage
-      const service = showCustomService ? formData.customService : formData.serviceType;
-      const requestData = {
-        id: Date.now(),
-        service_type: service,
-        description: formData.description,
-        location: `${formData.city} - ${formData.district}`,
-        city: formData.city,
-        district: formData.district,
-        address: formData.address,
-        budget: parseFloat(formData.budget),
-        date: formData.date,
-        time: formData.time,
-        customer_name: formData.name,
-        customer_phone: formData.phone,
-        customer_email: formData.email,
-        urgency: formData.urgency,
-        images_count: images.length,
-        status: 'pending',
-        created_at: new Date().toISOString(),
-      };
-
-      const requests = JSON.parse(localStorage.getItem('requests') || '[]');
-      requests.push(requestData);
-      localStorage.setItem('requests', JSON.stringify(requests));
+      // ✅ عرض رسائل الخطأ من Backend
+      if (error.errors) {
+        const messages = Object.entries(error.errors)
+          .map(([field, msgs]) => {
+            const fieldNames = {
+              'title': 'العنوان',
+              'description': 'الوصف',
+              'craft_id': 'المهنة',
+              'city': 'المدينة',
+              'images': 'الصور',
+            };
+            return `${fieldNames[field] || field}: ${msgs.join(', ')}`;
+          })
+          .join(' | ');
+        setError(messages);
+      } else {
+        setError(error.message || 'حدث خطأ في نشر الطلب');
+      }
       
-      setSuccess(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } finally {
+      setSubmitting(false);
     }
-    
-    setSubmitting(false);
   };
 
   const today = new Date().toISOString().split('T')[0];
@@ -287,7 +327,7 @@ const RequestServicePage = () => {
           {/* ✅ أزرار جديدة بعد إرسال الطلب */}
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
             <button
-              onClick={() => navigate('/my-bookings')}
+              onClick={() => navigate('/my-requests')}
               style={{
                 padding: '14px 28px',
                 borderRadius: '14px',
@@ -305,7 +345,7 @@ const RequestServicePage = () => {
               }}
             >
               <Bell size={18} />
-              {t.viewBookings}
+              {lang === 'ar' ? '📋 عرض طلباتي' : 'View My Requests'}
             </button>
             <Link
               to="/"
@@ -435,13 +475,23 @@ const RequestServicePage = () => {
                     {t.serviceType}
                     <span style={{ color: '#dc2626', fontSize: '0.8rem' }}>*{t.required}</span>
                   </label>
-                  <select name="serviceType" onChange={handleChange} value={formData.serviceType}
-                    style={inputStyle()}>
-                    <option value="">{lang === 'ar' ? 'اختر نوع الخدمة...' : 'Select service type...'}</option>
-                    {serviceTypes.map(type => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
+                  
+                  {/* ✅ استخدام المهن من Backend */}
+                  {loadingCrafts ? (
+                    <div style={{ padding: '12px', textAlign: 'center', color: textSecondary }}>
+                      <Loader size={20} className="animate-spin" style={{ margin: '0 auto 8px' }} />
+                      جاري تحميل المهن...
+                    </div>
+                  ) : (
+                    <select name="serviceType" onChange={handleChange} value={formData.serviceType}
+                      style={inputStyle()}>
+                      <option value="">{lang === 'ar' ? 'اختر نوع الخدمة...' : 'Select service type...'}</option>
+                      {crafts.map(craft => (
+                        <option key={craft.id} value={craft.name}>{craft.name}</option>
+                      ))}
+                      <option value="أخرى">➕ {lang === 'ar' ? 'أخرى' : 'Other'}</option>
+                    </select>
+                  )}
                 </div>
 
                 {showCustomService && (

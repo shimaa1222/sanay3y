@@ -15,12 +15,11 @@ import {
 } from 'lucide-react';
 
 const CraftsmanProfilePage = () => {
-  const { user, updateUser, logout } = useAuth();
+  const { user, updateUser } = useAuth();
   const { darkMode } = useTheme();
   const navigate = useNavigate();
   const [lang, setLang] = useState('ar');
   const [activeTab, setActiveTab] = useState('info');
-  const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -36,13 +35,14 @@ const CraftsmanProfilePage = () => {
   });
   const fileInputRef = useRef(null);
 
-  // Password change states
+  // ✅ Password change states
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
 
   const [profile, setProfile] = useState({
     firstName: user?.name?.split(' ')[0] || '',
@@ -77,11 +77,9 @@ const CraftsmanProfilePage = () => {
     const loadData = async () => {
       setLoading(true);
       try {
-        // جلب الإحصائيات
         const statsData = await api.getCraftsmanStats();
         setStats(statsData.stats || {});
         
-        // جلب بيانات المستخدم من الباك
         const userData = await api.getMe();
         if (userData.user) {
           const u = userData.user;
@@ -148,9 +146,6 @@ const CraftsmanProfilePage = () => {
     newPassword: lang === 'ar' ? 'كلمة المرور الجديدة' : 'New Password',
     confirmPassword: lang === 'ar' ? 'تأكيد كلمة المرور' : 'Confirm Password',
     change: lang === 'ar' ? 'تغيير' : 'Change',
-    deleteAccount: lang === 'ar' ? 'حذف الحساب' : 'Delete Account',
-    deleteWarning: lang === 'ar' ? 'عند حذف حسابك، سيتم حذف جميع بياناتك بشكل نهائي ولا يمكن استعادتها.' : 'Deleting your account will permanently remove all your data and cannot be undone.',
-    delete: lang === 'ar' ? 'حذف الحساب' : 'Delete Account',
     stats: lang === 'ar' ? 'الإحصائيات' : 'Statistics',
     earnings: lang === 'ar' ? 'الأرباح' : 'Earnings',
     completed: lang === 'ar' ? 'مكتملة' : 'Completed',
@@ -158,10 +153,13 @@ const CraftsmanProfilePage = () => {
     rating: lang === 'ar' ? 'التقييم' : 'Rating',
     featured: lang === 'ar' ? 'مميز' : 'Featured',
     error: lang === 'ar' ? 'حدث خطأ' : 'Error',
-    passwordChanged: lang === 'ar' ? 'تم تغيير كلمة المرور بنجاح' : 'Password changed successfully',
+    passwordChanged: lang === 'ar' ? '✅ تم تغيير كلمة المرور بنجاح' : '✅ Password changed successfully',
     fillFields: lang === 'ar' ? 'يرجى ملء جميع الحقول' : 'Please fill in all fields',
     passwordMismatch: lang === 'ar' ? 'كلمات المرور غير متطابقة' : 'Passwords do not match',
-    passwordMin: lang === 'ar' ? 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' : 'Password must be at least 6 characters',
+    passwordMin: lang === 'ar' ? 'كلمة المرور يجب أن تكون 8 أحرف على الأقل' : 'Password must be at least 8 characters',
+    loading: lang === 'ar' ? 'جاري التحميل...' : 'Loading...',
+    deleteImage: lang === 'ar' ? 'حذف الصورة' : 'Delete Image',
+    imageDeleted: lang === 'ar' ? '✅ تم حذف الصورة بنجاح' : '✅ Image deleted successfully',
   };
 
   // ============================================================
@@ -178,12 +176,6 @@ const CraftsmanProfilePage = () => {
   // ✅ دوال رفع الصور
   // ============================================================
 
-  /**
-   * رفع صورة واحدة إلى السيرفر
-   * @param {File} file - ملف الصورة
-   * @param {string} type - نوع الصورة (avatar, profile_photo, portfolio)
-   * @returns {Promise<Object|null>}
-   */
   const uploadImage = async (file, type = 'avatar') => {
     setLoading(true);
     setError('');
@@ -201,6 +193,7 @@ const CraftsmanProfilePage = () => {
         const newImage = {
           id: data.id || Date.now(),
           url: data.url,
+          path: data.path || data.url?.split('/storage/')[1] || '',
           name: data.name || 'صورة',
           date: new Date().toISOString(),
         };
@@ -220,13 +213,9 @@ const CraftsmanProfilePage = () => {
     }
   };
 
-  /**
-   * رفع صورة الملف الشخصي
-   */
   const handleUploadAvatar = async (file) => {
     if (!file) return;
     
-    // معاينة مؤقتة
     const reader = new FileReader();
     reader.onloadend = () => {
       setAvatar(reader.result);
@@ -236,9 +225,6 @@ const CraftsmanProfilePage = () => {
     await uploadImage(file, 'profile_photo');
   };
 
-  /**
-   * رفع عدة صور للمعرض
-   */
   const handleUploadMultiplePortfolio = async (files) => {
     if (!files || files.length === 0) return;
     
@@ -249,9 +235,11 @@ const CraftsmanProfilePage = () => {
     try {
       const data = await api.uploadMultiple(files, 'portfolio');
       
+      // ✅ حفظ الصور مع المسار للحذف لاحقاً
       const newImages = (data.uploads || data.images || []).map(img => ({
         id: img.id || Date.now() + Math.random(),
         url: img.url || img.path,
+        path: img.path || img.url?.split('/storage/')[1] || '',
         name: img.name || 'صورة',
         date: new Date().toISOString(),
       }));
@@ -267,10 +255,6 @@ const CraftsmanProfilePage = () => {
       setLoading(false);
     }
   };
-
-  // ============================================================
-  // ✅ تحديث دوال معالجة الصور
-  // ============================================================
 
   const handleAvatarChange = async (e) => {
     const file = e.target.files[0];
@@ -330,88 +314,119 @@ const CraftsmanProfilePage = () => {
   };
 
   // ============================================================
-  // ✅ حذف صورة من المعرض
+  // ✅ حذف صورة من المعرض - باستخدام api.deleteFile
   // ============================================================
   const removePortfolioImage = async (id) => {
+    // ✅ طلب تأكيد من المستخدم
+    if (!window.confirm(t.deleteImage)) {
+      return;
+    }
+
     setLoading(true);
     setError('');
     setSuccess('');
 
     try {
-      await api.deletePortfolioImage(id);
+      // ✅ البحث عن الصورة في المصفوفة للحصول على المسار
+      const imageToDelete = portfolioImages.find(img => img.id === id);
+      
+      if (imageToDelete && imageToDelete.path) {
+        // ✅ استخدام deleteFile مع المسار
+        await api.deleteFile(imageToDelete.path);
+        console.log('✅ Image deleted from server:', imageToDelete.path);
+      } else if (imageToDelete && imageToDelete.url) {
+        // ✅ استخراج المسار من URL
+        const path = imageToDelete.url.split('/storage/')[1];
+        if (path) {
+          await api.deleteFile(path);
+          console.log('✅ Image deleted from server:', path);
+        } else {
+          console.warn('⚠️ Could not extract path from URL:', imageToDelete.url);
+        }
+      } else {
+        console.warn('⚠️ No path found for image, deleting locally only');
+      }
+      
+      // ✅ حذف من القائمة المحلية
       setPortfolioImages(prev => prev.filter(img => img.id !== id));
-      setSuccess('تم حذف الصورة بنجاح');
+      setSuccess(t.imageDeleted);
       setTimeout(() => setSuccess(''), 3000);
+      
     } catch (error) {
       console.error('❌ Error deleting portfolio image:', error);
-      // Fallback - حذف محلي
+      
+      // ✅ حتى لو فشل الحذف من السيرفر، احذف محلياً
       setPortfolioImages(prev => prev.filter(img => img.id !== id));
+      setError(error.message || 'حدث خطأ في حذف الصورة');
     }
     setLoading(false);
   };
 
   // ============================================================
-  // ✅ تغيير كلمة المرور
+  // ✅ تغيير كلمة المرور - متوافق مع الـ API
   // ============================================================
   const handleChangePassword = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    setPasswordLoading(true);
     setError('');
     setSuccess('');
 
+    // ✅ التحقق من البيانات
     if (!currentPassword || !newPassword || !confirmPassword) {
       setError(t.fillFields);
-      setLoading(false);
+      setPasswordLoading(false);
       return;
     }
 
-    if (newPassword.length < 6) {
+    if (newPassword.length < 8) {
       setError(t.passwordMin);
-      setLoading(false);
+      setPasswordLoading(false);
       return;
     }
 
     if (newPassword !== confirmPassword) {
       setError(t.passwordMismatch);
-      setLoading(false);
+      setPasswordLoading(false);
       return;
     }
 
     try {
+      // ✅ استخدام الحقول الصحيحة حسب توثيق الـ API
+      // POST /api/auth/change-password
+      // Body: current_password, password, password_confirmation
       await api.changePassword({
-        old_password: currentPassword,
-        new_password: newPassword,
-        new_password_confirmation: confirmPassword,
+        current_password: currentPassword,
+        password: newPassword,
+        password_confirmation: confirmPassword,
       });
       
       setSuccess(t.passwordChanged);
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setTimeout(() => setSuccess(''), 3000);
+      setTimeout(() => setSuccess(''), 4000);
+      
     } catch (error) {
-      setError(error.message || 'حدث خطأ في تغيير كلمة المرور');
+      console.error('❌ Change password error:', error);
+      
+      // ✅ عرض تفاصيل الخطأ من الـ Backend
+      if (error.errors) {
+        const messages = Object.entries(error.errors)
+          .map(([field, msgs]) => {
+            const fieldNames = {
+              'current_password': 'كلمة المرور الحالية',
+              'password': 'كلمة المرور الجديدة',
+              'password_confirmation': 'تأكيد كلمة المرور',
+            };
+            return `${fieldNames[field] || field}: ${msgs.join(', ')}`;
+          })
+          .join(' | ');
+        setError(messages);
+      } else {
+        setError(error.message || 'حدث خطأ في تغيير كلمة المرور');
+      }
     } finally {
-      setLoading(false);
-    }
-  };
-
-  // ============================================================
-  // ✅ حذف الحساب
-  // ============================================================
-  const handleDeleteAccount = async () => {
-    if (!window.confirm(t.deleteWarning)) return;
-    
-    setLoading(true);
-    setError('');
-    
-    try {
-      await api.deleteAccount();
-      logout();
-      navigate('/');
-    } catch (error) {
-      setError(error.message || 'حدث خطأ في حذف الحساب');
-      setLoading(false);
+      setPasswordLoading(false);
     }
   };
 
@@ -598,7 +613,6 @@ const CraftsmanProfilePage = () => {
           <div className="animate-fade-in-up">
             <div style={{ background: cardBg, borderRadius: '16px', padding: '32px', border: `1px solid ${borderColor}` }}>
               <form onSubmit={handleSave}>
-                {/* Names */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.firstName}</label>
@@ -610,7 +624,6 @@ const CraftsmanProfilePage = () => {
                   </div>
                 </div>
 
-                {/* Email & Phone */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.email}</label>
@@ -622,7 +635,6 @@ const CraftsmanProfilePage = () => {
                   </div>
                 </div>
 
-                {/* WhatsApp & Profession */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.whatsapp}</label>
@@ -634,7 +646,6 @@ const CraftsmanProfilePage = () => {
                   </div>
                 </div>
 
-                {/* City & District */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.city}</label>
@@ -646,7 +657,6 @@ const CraftsmanProfilePage = () => {
                   </div>
                 </div>
 
-                {/* Bio */}
                 <div style={{ marginBottom: '20px' }}>
                   <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>
                     <FileText size={14} style={{ display: 'inline', marginRight: '6px' }} />
@@ -658,7 +668,6 @@ const CraftsmanProfilePage = () => {
                   />
                 </div>
 
-                {/* Price */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.price} ({t.egp})</label>
@@ -716,33 +725,55 @@ const CraftsmanProfilePage = () => {
                   display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
                   gap: '12px', marginTop: '24px',
                 }}>
-                  {portfolioImages.map((img, index) => (
-                    <div key={img.id} className="hover-lift" style={{
-                      position: 'relative', borderRadius: '12px', overflow: 'hidden',
-                      height: '160px', border: `1px solid ${borderColor}`,
-                    }}>
-                      <img src={img.url} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      <button onClick={() => removePortfolioImage(img.id)}
-                        disabled={loading}
-                        style={{
-                          position: 'absolute', top: '8px', right: '8px',
-                          width: '28px', height: '28px', borderRadius: '50%',
-                          background: 'rgba(220,38,38,0.9)', color: 'white',
-                          border: 'none', cursor: loading ? 'default' : 'pointer',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          opacity: loading ? 0.5 : 1,
-                        }}>
-                        <X size={14} />
-                      </button>
-                      <div style={{
-                        position: 'absolute', bottom: 0, left: 0, right: 0,
-                        background: 'rgba(0,0,0,0.6)', color: 'white',
-                        padding: '6px 10px', fontSize: '0.75rem',
+                  {portfolioImages.map((img, index) => {
+                    // ✅ التحقق من وجود URL صالح
+                    const imageUrl = img.url || img;
+                    const imageName = img.name || `${lang === 'ar' ? 'صورة' : 'Image'} ${index + 1}`;
+                    
+                    return (
+                      <div key={img.id || index} className="hover-lift" style={{
+                        position: 'relative', borderRadius: '12px', overflow: 'hidden',
+                        height: '160px', border: `1px solid ${borderColor}`,
                       }}>
-                        {img.name || `${lang === 'ar' ? 'صورة' : 'Image'} ${index + 1}`}
+                        <img 
+                          src={typeof imageUrl === 'string' ? imageUrl : ''} 
+                          alt={imageName}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={(e) => {
+                            e.target.src = 'https://via.placeholder.com/180x160/e2e8f0/64748b?text=+';
+                          }}
+                        />
+                        <button 
+                          onClick={() => removePortfolioImage(img.id)}
+                          disabled={loading}
+                          style={{
+                            position: 'absolute', top: '8px', right: '8px',
+                            width: '28px', height: '28px', borderRadius: '50%',
+                            background: 'rgba(220,38,38,0.9)', color: 'white',
+                            border: 'none', cursor: loading ? 'default' : 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            opacity: loading ? 0.5 : 1,
+                            transition: 'all 0.3s ease',
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+                          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                        >
+                          <X size={14} />
+                        </button>
+                        <div style={{
+                          position: 'absolute', bottom: 0, left: 0, right: 0,
+                          background: 'rgba(0,0,0,0.6)', color: 'white',
+                          padding: '6px 10px', fontSize: '0.75rem',
+                          textAlign: 'center',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {imageName}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -753,7 +784,7 @@ const CraftsmanProfilePage = () => {
         {activeTab === 'settings' && (
           <div className="animate-fade-in-up">
             {/* ===== Change Password ===== */}
-            <div style={{ background: cardBg, borderRadius: '16px', padding: '32px', border: `1px solid ${borderColor}`, marginBottom: '20px' }}>
+            <div style={{ background: cardBg, borderRadius: '16px', padding: '32px', border: `1px solid ${borderColor}` }}>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: textColor, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Lock size={18} style={{ color: '#3b82f6' }} />
                 {t.changePassword}
@@ -848,57 +879,27 @@ const CraftsmanProfilePage = () => {
                   </div>
                 </div>
 
-                <button type="submit" disabled={loading} style={{
+                <button type="submit" disabled={passwordLoading} style={{
                   padding: '12px 28px',
-                  background: loading ? '#94a3b8' : '#3b82f6',
+                  background: passwordLoading ? '#94a3b8' : '#3b82f6',
                   color: 'white',
                   border: 'none',
                   borderRadius: '10px',
                   fontWeight: 600,
-                  cursor: loading ? 'not-allowed' : 'pointer',
+                  cursor: passwordLoading ? 'not-allowed' : 'pointer',
                   fontFamily: "'Cairo', sans-serif",
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  opacity: loading ? 0.7 : 1,
+                  opacity: passwordLoading ? 0.7 : 1,
                 }}>
-                  {loading ? <Loader size={18} className="animate-spin" /> : <Lock size={18} />}
-                  {t.change}
+                  {passwordLoading ? <Loader size={18} className="animate-spin" /> : <Lock size={18} />}
+                  {passwordLoading ? lang === 'ar' ? 'جاري التغيير...' : 'Changing...' : t.change}
                 </button>
               </form>
             </div>
 
-            {/* ===== Delete Account ===== */}
-            <div style={{ background: cardBg, borderRadius: '16px', padding: '32px', border: `1px solid ${borderColor}` }}>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#dc2626', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Trash2 size={18} />
-                {t.deleteAccount}
-              </h3>
-              <p style={{ color: textSecondary, fontSize: '0.9rem', marginBottom: '20px', lineHeight: 1.6 }}>
-                {t.deleteWarning}
-              </p>
-              <button 
-                onClick={handleDeleteAccount}
-                disabled={loading}
-                style={{
-                  padding: '12px 28px',
-                  background: loading ? '#94a3b8' : '#dc2626',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '10px',
-                  fontWeight: 600,
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  fontFamily: "'Cairo', sans-serif",
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  opacity: loading ? 0.7 : 1,
-                }}
-              >
-                {loading ? <Loader size={18} className="animate-spin" /> : <Trash2 size={18} />}
-                {t.delete}
-              </button>
-            </div>
+            {/* ❌ تم إزالة زر حذف الحساب لأنه غير مدعوم في الـ Backend */}
           </div>
         )}
       </div>

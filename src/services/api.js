@@ -1,5 +1,5 @@
 // src/services/api.js
-const API_URL = process.env.REACT_APP_API_URL || "https://sanay3e-production.up.railway.app/api";
+const API_URL = "http://localhost:8000/api";
 
 // ✅ دوال مساعدة
 const getHeaders = () => {
@@ -19,6 +19,7 @@ const getFormHeaders = () => {
   };
 };
 
+// ✅ تحسين handleResponse لعرض تفاصيل الأخطاء
 const handleResponse = async (res) => {
   if (!res) {
     throw new Error("NETWORK_ERROR");
@@ -36,9 +37,88 @@ const handleResponse = async (res) => {
   }
 
   if (!res.ok) {
-    const message = data.message || 
-      (data.errors ? Object.values(data.errors).flat().join(" | ") : `خطأ ${res.status}`);
-    const error = new Error(message);
+    let errorMessage = data.message || 'حدث خطأ غير متوقع';
+    
+    if (res.status === 422 && data.errors) {
+      const errorDetails = Object.entries(data.errors)
+        .map(([field, messages]) => {
+          const fieldNames = {
+            'first_name': 'الاسم الأول',
+            'last_name': 'الاسم الأخير',
+            'email': 'البريد الإلكتروني',
+            'phone': 'رقم الهاتف',
+            'city': 'المدينة',
+            'password': 'كلمة المرور',
+            'national_id_front': 'البطاقة الأمامية',
+            'national_id_back': 'البطاقة الخلفية',
+            'craft_ids': 'المهن',
+            'craft_ids.0': 'المهنة',
+            'craft_ids.*': 'المهنة',
+            'district': 'الحي',
+            'whatsapp': 'واتساب',
+            'bio': 'السيرة الذاتية',
+            'hourly_rate': 'السعر بالساعة',
+            'full_address': 'العنوان الكامل',
+            'is_available': 'متاح',
+            'profile_photo': 'الصورة الشخصية',
+            'skills': 'المهارات',
+            'title': 'العنوان',
+            'description': 'الوصف',
+            'budget_from': 'الميزانية من',
+            'budget_to': 'الميزانية إلى',
+            'needed_by': 'مطلوب بحلول',
+            'urgency': 'درجة الإلحاح',
+            'images': 'الصور',
+            'craft_id': 'المهنة',
+            'service_id': 'الخدمة',
+            'booking_date': 'تاريخ الحجز',
+            'booking_time': 'وقت الحجز',
+            'notes': 'ملاحظات',
+            'location': 'الموقع',
+            'rating': 'التقييم',
+            'comment': 'التعليق',
+            'current_password': 'كلمة المرور الحالية',
+            'reason': 'السبب',
+            'offered_price': 'السعر المعروض',
+            'estimated_days': 'الأيام المتوقعة',
+            'message': 'الرسالة',
+            'status': 'الحالة',
+            'custom_craft': 'المهنة المخصصة'
+          };
+          
+          const fieldName = fieldNames[field] || field;
+          const messagesText = messages.join(', ');
+          return `${fieldName}: ${messagesText}`;
+        })
+        .join('\n');
+      
+      errorMessage = `❌ فشل التحقق من البيانات:\n${errorDetails}`;
+      
+      const error = new Error(errorMessage);
+      error.errors = data.errors;
+      error.status = res.status;
+      error.data = data;
+      throw error;
+    }
+    
+    if (res.status === 401) {
+      errorMessage = '⚠️ جلسة غير صالحة. يرجى تسجيل الدخول مرة أخرى.';
+      localStorage.removeItem('token');
+    }
+    
+    if (res.status === 403) {
+      errorMessage = data.message || '⛔ ليس لديك صلاحية للقيام بهذا الإجراء';
+    }
+    
+    if (res.status === 404) {
+      errorMessage = data.message || '🔍 المورد غير موجود';
+    }
+    
+    if (res.status === 429) {
+      errorMessage = '⏳ طلبات كثيرة جداً. يرجى الانتظار ثم المحاولة مرة أخرى.';
+    }
+    
+    const error = new Error(errorMessage);
     error.errors = data.errors || null;
     error.status = res.status;
     error.data = data;
@@ -53,8 +133,6 @@ const handleResponse = async (res) => {
 // ============================================================
 
 const api = {
-  // ... جميع الدوال الموجودة ...
-  
   // ============================================================
   // ✅ PUBLIC - الحرفيون
   // ============================================================
@@ -78,6 +156,8 @@ const api = {
       if (params.search) query.append("search", params.search);
       if (params.sort_by) query.append("sort_by", params.sort_by);
       if (params.per_page) query.append("per_page", params.per_page);
+      if (params.page) query.append("page", params.page);
+      
       const res = await fetch(
         `${API_URL}/craftsmen.home.search?${query.toString()}`,
         { headers: getHeaders() }
@@ -110,6 +190,120 @@ const api = {
     } catch (error) {
       console.warn('⚠️ getCrafts fallback:', error.message);
       return { crafts: [] };
+    }
+  },
+
+  // ============================================================
+  // ✅ REVIEWS (Public - GET) - يعمل بدون تسجيل دخول
+  // ============================================================
+  
+  /**
+   * جلب جميع التقييمات (عام - بدون تسجيل دخول)
+   * GET /api/auth/reviews
+   */
+  getReviews: async (params = {}) => {
+    try {
+      const query = new URLSearchParams();
+      if (params.per_page) query.append("per_page", params.per_page || 20);
+      if (params.page) query.append("page", params.page || 1);
+      if (params.craftsman_id) query.append("craftsman_id", params.craftsman_id);
+      if (params.client_id) query.append("client_id", params.client_id);
+      if (params.rating) query.append("rating", params.rating);
+      if (params.sort_by) query.append("sort_by", params.sort_by || 'newest');
+      
+      const url = `${API_URL}/auth/reviews?${query.toString()}`;
+      console.log('📤 [API] Fetching public reviews:', url);
+      
+      const res = await fetch(url, {
+        headers: getHeaders(),
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ getReviews fallback:', error.message);
+      return { reviews: [] };
+    }
+  },
+
+  /**
+   * جلب تقييمات حرفي معين
+   * GET /api/auth/reviews?craftsman_id={id}
+   */
+  getCraftsmanReviews: async (craftsmanId, perPage = 10) => {
+    return api.getReviews({ craftsman_id: craftsmanId, per_page: perPage });
+  },
+
+  /**
+   * جلب تقييمات عميل معين
+   * GET /api/auth/reviews?client_id={id}
+   */
+  getClientReviews: async (clientId, perPage = 10) => {
+    return api.getReviews({ client_id: clientId, per_page: perPage });
+  },
+
+  /**
+   * جلب التقييمات حسب التقييم (نجوم)
+   * GET /api/auth/reviews?rating={rating}
+   */
+  getReviewsByRating: async (rating, perPage = 10) => {
+    return api.getReviews({ rating, per_page: perPage });
+  },
+
+  // ============================================================
+  // ✅ REVIEWS (Authenticated - Add/Delete)
+  // ============================================================
+
+  /**
+   * إضافة تقييم (محمي - للعميل فقط)
+   * POST /client/bookings.addreview/{id}/review
+   */
+  addReview: async (bookingId, data) => {
+    try {
+      const res = await fetch(
+        `${API_URL}/client/bookings.addreview/${bookingId}/review`,
+        {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify(data),
+        }
+      );
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ addReview error:', error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * حذف تقييم (محمي - للعميل أو الأدمن)
+   * DELETE /api/auth/reviews/{id}
+   */
+  deleteReview: async (reviewId) => {
+    try {
+      const res = await fetch(`${API_URL}/auth/reviews/${reviewId}`, {
+        method: "DELETE",
+        headers: getHeaders(),
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ deleteReview error:', error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * الإشارة إلى أن التقييم مفيد (محمي)
+   * POST /api/auth/reviews/{id}/helpful
+   */
+  markReviewHelpful: async (reviewId) => {
+    try {
+      const res = await fetch(`${API_URL}/auth/reviews/${reviewId}/helpful`, {
+        method: "POST",
+        headers: getHeaders(),
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ markReviewHelpful error:', error.message);
+      throw error;
     }
   },
 
@@ -152,14 +346,88 @@ const api = {
 
   registerCraftsman: async (formData) => {
     try {
+      console.log('📤 [API] registerCraftsman called');
+      
+      let craftIdsFromForm = [];
+      
+      for (let pair of formData.entries()) {
+        if (pair[1] instanceof File) {
+          console.log(`   ${pair[0]}: File (${pair[1].name}, ${(pair[1].size / 1024).toFixed(2)} KB, ${pair[1].type})`);
+        } else {
+          console.log(`   ${pair[0]}: ${pair[1]}`);
+          if (pair[0] === 'craft_ids[]') {
+            craftIdsFromForm.push(pair[1]);
+          }
+        }
+      }
+      
+      console.log('📋 [API] craft_ids collected:', craftIdsFromForm);
+      
+      const phone = formData.get('phone');
+      if (phone) {
+        let cleanedPhone = phone.replace(/[\s\-\(\)\+]/g, '');
+        if (cleanedPhone.length === 10 && !cleanedPhone.startsWith('0')) {
+          cleanedPhone = '0' + cleanedPhone;
+          formData.set('phone', cleanedPhone);
+          console.log(`   ✅ تم تصحيح رقم الهاتف إلى: ${cleanedPhone}`);
+        }
+        const phoneRegex = /^(010|011|012|015)[0-9]{8}$/;
+        if (!phoneRegex.test(cleanedPhone)) {
+          throw new Error('رقم الهاتف يجب أن يكون 11 رقم ويبدأ بـ 010, 011, 012 أو 015');
+        }
+      }
+      
+      const nationalIdFront = formData.get('national_id_front');
+      const nationalIdBack = formData.get('national_id_back');
+      
+      if (!nationalIdFront || !(nationalIdFront instanceof File)) {
+        throw new Error('يرجى تحميل صورة البطاقة الأمامية');
+      }
+      
+      if (!nationalIdBack || !(nationalIdBack instanceof File)) {
+        throw new Error('يرجى تحميل صورة البطاقة الخلفية');
+      }
+      
+      const maxSize = 5 * 1024 * 1024;
+      if (nationalIdFront.size > maxSize) {
+        throw new Error('حجم صورة البطاقة الأمامية كبير جداً (الحد الأقصى 5 ميجابايت)');
+      }
+      if (nationalIdBack.size > maxSize) {
+        throw new Error('حجم صورة البطاقة الخلفية كبير جداً (الحد الأقصى 5 ميجابايت)');
+      }
+      
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+      if (!allowedTypes.includes(nationalIdFront.type)) {
+        throw new Error('صيغة البطاقة الأمامية غير مدعومة (يُسمح بـ JPG, JPEG, PNG)');
+      }
+      if (!allowedTypes.includes(nationalIdBack.type)) {
+        throw new Error('صيغة البطاقة الخلفية غير مدعومة (يُسمح بـ JPG, JPEG, PNG)');
+      }
+      
+      const craftIds = formData.getAll('craft_ids[]');
+      console.log('📋 [API] craft_ids from getAll:', craftIds);
+      
+      const customCraft = formData.get('custom_craft');
+      
+      if ((!craftIds || craftIds.length === 0) && !customCraft) {
+        throw new Error('يرجى اختيار مهنة على الأقل أو كتابة مهنة مخصصة');
+      }
+      
       const res = await fetch(`${API_URL}/auth/register/craftsman`, {
         method: "POST",
         headers: getFormHeaders(),
         body: formData,
       });
-      return await handleResponse(res);
+      
+      const result = await handleResponse(res);
+      console.log('✅ [API] registerCraftsman success:', result);
+      return result;
+      
     } catch (error) {
       console.warn('⚠️ registerCraftsman error:', error.message);
+      if (error.errors) {
+        throw error;
+      }
       throw error;
     }
   },
@@ -331,23 +599,6 @@ const api = {
     }
   },
 
-  addReview: async (bookingId, data) => {
-    try {
-      const res = await fetch(
-        `${API_URL}/client/bookings.addreview/${bookingId}/review`,
-        {
-          method: "POST",
-          headers: getHeaders(),
-          body: JSON.stringify(data),
-        }
-      );
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ addReview error:', error.message);
-      throw error;
-    }
-  },
-
   // ============================================================
   // ✅ CRAFTSMAN ROUTES
   // ============================================================
@@ -415,6 +666,10 @@ const api = {
     }
   },
 
+  // ============================================================
+  // ✅ SERVICE POSTS (CRAFTSMAN)
+  // ============================================================
+  
   getServicePosts: async (params = {}) => {
     try {
       const query = new URLSearchParams();
@@ -455,6 +710,7 @@ const api = {
   // ============================================================
   // ✅ SERVICE POSTS (CLIENT)
   // ============================================================
+  
   getMyPosts: async () => {
     try {
       const res = await fetch(`${API_URL}/client/my-posts`, {
@@ -526,6 +782,14 @@ const api = {
   // ============================================================
   // ✅ UPLOAD
   // ============================================================
+  
+  /**
+   * رفع صورة واحدة
+   * POST /api/upload/image
+   * @param {File} file - ملف الصورة
+   * @param {string} type - نوع الصورة (avatar, profile_photo, national_id, portfolio, post_image, chat_file, document)
+   * @returns {Promise<Object>}
+   */
   uploadImage: async (file, type = "avatar") => {
     try {
       const formData = new FormData();
@@ -543,6 +807,13 @@ const api = {
     }
   },
 
+  /**
+   * رفع عدة صور
+   * POST /api/upload/multiple
+   * @param {File[]} files - مصفوفة من ملفات الصور
+   * @param {string} type - نوع الصور (portfolio, post_image, chat_file)
+   * @returns {Promise<Object>}
+   */
   uploadMultiple: async (files, type = "portfolio") => {
     try {
       const formData = new FormData();
@@ -560,6 +831,12 @@ const api = {
     }
   },
 
+  /**
+   * رفع مستند
+   * POST /api/upload/document
+   * @param {File} file - ملف المستند (pdf, doc, docx, xls, xlsx, txt)
+   * @returns {Promise<Object>}
+   */
   uploadDocument: async (file) => {
     try {
       const formData = new FormData();
@@ -576,6 +853,12 @@ const api = {
     }
   },
 
+  /**
+   * حذف ملف
+   * DELETE /api/upload
+   * @param {string} path - مسار الملف
+   * @returns {Promise<Object>}
+   */
   deleteFile: async (path) => {
     try {
       const res = await fetch(`${API_URL}/upload`, {
@@ -593,6 +876,14 @@ const api = {
   // ============================================================
   // ✅ NOTIFICATIONS
   // ============================================================
+  
+  /**
+   * جلب الإشعارات
+   * GET /api/notifications
+   * @param {boolean} unreadOnly - عرض غير المقروء فقط
+   * @param {number} perPage - عدد النتائج لكل صفحة
+   * @returns {Promise<Object>}
+   */
   getNotifications: async (unreadOnly = false, perPage = 20) => {
     try {
       const query = new URLSearchParams();
@@ -609,6 +900,11 @@ const api = {
     }
   },
 
+  /**
+   * جلب عدد الإشعارات غير المقروءة
+   * GET /api/notifications/count
+   * @returns {Promise<Object>}
+   */
   getUnreadCount: async () => {
     try {
       const res = await fetch(`${API_URL}/notifications/count`, {
@@ -621,6 +917,12 @@ const api = {
     }
   },
 
+  /**
+   * تعليم إشعار كمقروء
+   * PATCH /api/notifications/{id}/read
+   * @param {string|number} id - معرف الإشعار
+   * @returns {Promise<Object>}
+   */
   markNotificationRead: async (id) => {
     try {
       const res = await fetch(`${API_URL}/notifications/${id}/read`, {
@@ -634,6 +936,11 @@ const api = {
     }
   },
 
+  /**
+   * تعليم كل الإشعارات كمقروءة
+   * POST /api/notifications/read-all
+   * @returns {Promise<Object>}
+   */
   markAllNotificationsRead: async () => {
     try {
       const res = await fetch(`${API_URL}/notifications/read-all`, {
@@ -647,6 +954,12 @@ const api = {
     }
   },
 
+  /**
+   * حذف إشعار
+   * DELETE /api/notifications/{id}
+   * @param {string|number} id - معرف الإشعار
+   * @returns {Promise<Object>}
+   */
   deleteNotification: async (id) => {
     try {
       const res = await fetch(`${API_URL}/notifications/${id}`, {
@@ -660,6 +973,11 @@ const api = {
     }
   },
 
+  /**
+   * حذف كل الإشعارات المقروءة
+   * DELETE /api/notifications
+   * @returns {Promise<Object>}
+   */
   clearAllNotifications: async () => {
     try {
       const res = await fetch(`${API_URL}/notifications`, {

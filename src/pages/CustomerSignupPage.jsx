@@ -54,10 +54,10 @@ const CustomerSignupPage = () => {
   const [otpError, setOtpError] = useState('');
   const [otpSuccess, setOtpSuccess] = useState('');
 
+  // ✅ شيلنا email من formData
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
-    email: '',
     phone: '',
     city: '',
     district: '',
@@ -115,7 +115,7 @@ const CustomerSignupPage = () => {
     login: lang === 'ar' ? 'تسجيل الدخول' : 'Login',
     required: lang === 'ar' ? 'مطلوب' : 'Required',
     invalidEmail: lang === 'ar' ? 'بريد إلكتروني غير صالح' : 'Invalid email',
-    passwordMin: lang === 'ar' ? '6 أحرف على الأقل' : 'Min 6 characters',
+    passwordMin: lang === 'ar' ? '8 أحرف على الأقل' : 'Min 8 characters',  // ✅ 8 بدلاً من 6
     passwordMismatch: lang === 'ar' ? 'كلمات المرور غير متطابقة' : 'Passwords do not match',
     creating: lang === 'ar' ? 'جاري إنشاء الحساب...' : 'Creating account...',
     redirecting: lang === 'ar' ? 'جاري التوجيه...' : 'Redirecting...',
@@ -252,57 +252,83 @@ const CustomerSignupPage = () => {
     setOtp('');
   };
 
+  // ✅ التحقق من صحة البيانات (باستخدام email من OTP)
   const validateForm = () => {
     const newErrors = {};
 
+    console.log('🔍 Validating form data:', formData);
+    console.log('📧 Email from OTP:', email);
+
     if (!formData.firstName.trim()) newErrors.firstName = t.required;
     if (!formData.lastName.trim()) newErrors.lastName = t.required;
-    if (!formData.email.trim()) {
+    
+    // ✅ استخدم email من OTP مش formData.email
+    if (!email.trim()) {
       newErrors.email = t.required;
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+    } else if (!/\S+@\S+\.\S+/.test(email)) {
       newErrors.email = t.invalidEmail;
     }
+    
     if (!formData.phone.trim()) newErrors.phone = t.required;
     if (!formData.city && locationMethod === 'manual') newErrors.city = t.required;
+    
+    // ✅ 8 أحرف بدلاً من 6
     if (!formData.password) {
       newErrors.password = t.required;
-    } else if (formData.password.length < 6) {
+    } else if (formData.password.length < 8) {
       newErrors.password = t.passwordMin;
     }
     if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = t.passwordMismatch;
     }
 
+    console.log('🔍 Validation errors:', newErrors);
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  // ✅ الخطوة 3: تسجيل العميل (مع verified_token)
+  // ✅ الخطوة 3: تسجيل العميل
   const handleRegister = async (e) => {
     e.preventDefault();
+    console.log('✅ زر إنشاء الحساب اتضغط!');
+    console.log('📧 Email from OTP:', email);
+
     setError('');
     setSuccess('');
 
-    if (!validateForm()) return;
+    // ✅ التحقق من صحة البيانات
+    if (!validateForm()) {
+      console.log('❌ Validation failed');
+      return;
+    }
 
     // ✅ التأكد من وجود verified_token
     if (!verifiedToken) {
+      console.log('❌ No verified token found');
       setError(lang === 'ar' ? 'يرجى تأكيد البريد الإلكتروني أولاً' : 'Please verify your email first');
       setStep('otp');
       return;
     }
 
+    console.log('✅ Verified token exists:', verifiedToken);
     setIsSubmitting(true);
 
     try {
-      const data = await api.registerClient({
+      const registerData = {
         name: `${formData.firstName} ${formData.lastName}`,
-        email: formData.email,
+        email: email, // ✅ من OTP
         password: formData.password,
         password_confirmation: formData.confirmPassword,
         phone: formData.phone,
-        verified_token: verifiedToken, // ✅ مهم جداً
-      });
+        verified_token: verifiedToken,
+      };
+
+      console.log('📤 Sending registration data:', registerData);
+
+      const data = await api.registerClient(registerData);
+
+      console.log('✅ Registration successful:', data);
 
       setSuccess(data.message || 'تم إنشاء الحساب بنجاح');
       
@@ -310,21 +336,22 @@ const CustomerSignupPage = () => {
       localStorage.removeItem('verified_token');
       
       // ✅ حفظ الإيميل للتأكيد
-      localStorage.setItem('pendingVerificationEmail', formData.email);
+      localStorage.setItem('pendingVerificationEmail', email);
       
-      // ✅ توجيه إلى صفحة تأكيد البريد بعد 2 ثانية
+      // ✅ توجيه إلى صفحة العميل مباشرة
       setTimeout(() => {
-        navigate('/verify-email');
+        navigate('/customer/home');
       }, 2000);
 
     } catch (err) {
+      console.error('❌ Registration error:', err);
+      
       if (err.errors) {
         const errorMessages = Object.values(err.errors).flat().join(' | ');
         setError(errorMessages);
       } else {
         setError(err.message || 'حدث خطأ في إنشاء الحساب');
       }
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -648,7 +675,7 @@ const CustomerSignupPage = () => {
     </form>
   );
 
-  // ✅ عرض Register Form (بعد التحقق)
+  // ✅ عرض Register Form (شيلنا حقل الإيميل)
   const renderRegisterStep = () => (
     <>
       {otpSuccess && (
@@ -704,6 +731,23 @@ const CustomerSignupPage = () => {
           {success}
         </div>
       )}
+
+      {/* ✅ رسالة تأكيد الإيميل بدلاً من الحقل */}
+      <div className="animate-fade-in-up delay-200" style={{
+        background: darkMode ? 'rgba(5,150,105,0.1)' : '#d1fae5',
+        padding: '12px 16px',
+        borderRadius: '12px',
+        marginBottom: '20px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        border: '1px solid rgba(5,150,105,0.2)',
+      }}>
+        <CheckCircle size={18} style={{ color: '#059669' }} />
+        <span style={{ color: '#059669', fontWeight: 600 }}>
+          ✅ {lang === 'ar' ? `تم تأكيد البريد: ${email}` : `Email verified: ${email}`}
+        </span>
+      </div>
 
       {/* Names */}
       <div className="animate-fade-in-up delay-300" style={{
@@ -761,39 +805,6 @@ const CustomerSignupPage = () => {
           {errors.lastName && (
             <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.lastName}</span>
           )}
-        </div>
-      </div>
-
-      {/* Email - محجوب (يُؤخذ من OTP) */}
-      <div style={{ marginBottom: '20px' }}>
-        <label style={{
-          display: 'block',
-          fontSize: '0.875rem',
-          fontWeight: 600,
-          color: textColor,
-          marginBottom: '8px',
-        }}>
-          {t.email} <span style={{ color: '#dc2626' }}>*</span>
-        </label>
-        <div style={{ position: 'relative' }}>
-          <Mail size={16} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary }} />
-          <input
-            type="email"
-            value={email}
-            disabled
-            style={{ ...inputStyle(), paddingRight: '40px', opacity: 0.7, cursor: 'not-allowed' }}
-          />
-          <span style={{
-            position: 'absolute',
-            left: '14px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            color: '#059669',
-            fontSize: '0.7rem',
-            fontWeight: 600,
-          }}>
-            ✅ {lang === 'ar' ? 'تم التأكيد' : 'Verified'}
-          </span>
         </div>
       </div>
 
@@ -1016,7 +1027,7 @@ const CustomerSignupPage = () => {
               value={formData.password}
               onChange={handleChange}
               style={{ ...inputStyle(errors.password), paddingRight: '40px', paddingLeft: '40px' }}
-              placeholder="••••••••"
+              placeholder="•••••••• (8 أحرف على الأقل)"  // ✅ 8 أحرف
             />
             <button
               type="button"

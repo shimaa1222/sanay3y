@@ -1,39 +1,29 @@
-// src/pages/ReviewsListPage.jsx
+// src/pages/PublicReviewsPage.jsx
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { 
-  Star, TrendingUp, Users, Filter, ThumbsUp, 
-  MessageSquare, Award, ChevronDown, Search,
-  Calendar, User, CheckCircle, Sparkles,
-  BarChart3, PieChart, Loader, AlertCircle,
-  ArrowLeft
+  Star, ThumbsUp, MessageSquare, Calendar, Search,
+  BarChart3, AlertCircle, ArrowLeft, User, Filter,
+  ChevronDown, Loader, CheckCircle
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
-const ReviewsListPage = () => {
+const PublicReviewsPage = () => {
   const navigate = useNavigate();
   const { darkMode } = useTheme();
-  const { user } = useAuth();
   const [lang, setLang] = useState('ar');
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [filter, setFilter] = useState(0);
   const [sortBy, setSortBy] = useState('newest');
-  const [helpfulClicked, setHelpfulClicked] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [helpfulClicked, setHelpfulClicked] = useState([]);
   const [stats, setStats] = useState({
     total: 0,
     avg: 0,
     distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
-  });
-  const [error, setError] = useState('');
-  const [pagination, setPagination] = useState({
-    current_page: 1,
-    last_page: 1,
-    per_page: 10,
-    total: 0,
   });
 
   // ========== Language ==========
@@ -57,16 +47,14 @@ const ReviewsListPage = () => {
       setError('');
       
       try {
-        // ✅ جلب التقييمات من API الفعلي
-        console.log('📤 Fetching reviews from API...');
+        console.log('📤 Fetching public reviews from API...');
         const data = await api.getReviews({
-          per_page: 20,
-          page: pagination.current_page,
+          per_page: 50,
         });
         
-        console.log('📥 Reviews response:', data);
+        console.log('📥 Public reviews response:', data);
         
-        // ✅ التعامل مع Response من Backend
+        // ✅ التعامل مع Response
         let reviewsData = [];
         
         if (data.reviews && Array.isArray(data.reviews)) {
@@ -76,22 +64,19 @@ const ReviewsListPage = () => {
         } else if (data.data && Array.isArray(data.data)) {
           reviewsData = data.data;
         } else {
-          // ✅ إذا كان الـ Response مختلفاً
           reviewsData = Object.values(data).filter(item => 
             item && typeof item === 'object' && item.id && item.rating
           );
         }
         
-        console.log('✅ Processed reviews:', reviewsData);
-        
-        // ✅ تحويل البيانات إلى الشكل المطلوب
+        // ✅ تحويل البيانات
         const formattedReviews = reviewsData.map(r => ({
           id: r.id,
           rating: r.rating || 0,
           comment: r.comment || r.message || (lang === 'ar' ? 'لا يوجد تعليق' : 'No comment'),
           title: r.title || '',
           client_name: r.client?.name || r.client_name || r.name || (lang === 'ar' ? 'مستخدم' : 'User'),
-          client_id: r.client?.id || r.client_id || r.user_id,
+          client_id: r.client?.id || r.client_id,
           craftsman_name: r.craftsman ? `${r.craftsman.first_name || ''} ${r.craftsman.last_name || ''}`.trim() : '',
           craftsman_id: r.craftsman?.id || r.craftsman_id,
           profession: r.craftsman?.crafts?.[0]?.name || r.profession || (lang === 'ar' ? 'خدمة منزلية' : 'Home Service'),
@@ -100,15 +85,17 @@ const ReviewsListPage = () => {
           helpful_count: r.helpful_count || 0,
         }));
         
-        setReviews(formattedReviews);
+        // ✅ عرض التقييمات المرئية فقط
+        const visibleReviews = formattedReviews.filter(r => r.is_visible !== false);
+        setReviews(visibleReviews);
         
         // ✅ حساب الإحصائيات
-        const total = formattedReviews.length;
-        const sum = formattedReviews.reduce((s, r) => s + (r.rating || 0), 0);
+        const total = visibleReviews.length;
+        const sum = visibleReviews.reduce((s, r) => s + (r.rating || 0), 0);
         const avg = total > 0 ? Math.round((sum / total) * 10) / 10 : 0;
 
         const dist = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
-        formattedReviews.forEach(r => {
+        visibleReviews.forEach(r => {
           const rating = Math.round(r.rating || 0);
           if (rating >= 1 && rating <= 5) {
             dist[rating] = (dist[rating] || 0) + 1;
@@ -116,22 +103,12 @@ const ReviewsListPage = () => {
         });
 
         setStats({ total, avg, distribution: dist });
-        
-        // ✅ تحديث Pagination
-        if (data.meta) {
-          setPagination({
-            current_page: data.meta.current_page || 1,
-            last_page: data.meta.last_page || 1,
-            per_page: data.meta.per_page || 10,
-            total: data.meta.total || 0,
-          });
-        }
 
       } catch (error) {
-        console.error('❌ Reviews error:', error);
+        console.error('❌ Public reviews error:', error);
         setError(error.message || (lang === 'ar' ? 'حدث خطأ في تحميل التقييمات' : 'Error loading reviews'));
         
-        // ✅ استخدام Fallback في حالة الخطأ
+        // ✅ Fallback data
         const fallbackReviews = [
           { 
             id: 1, 
@@ -160,6 +137,24 @@ const ReviewsListPage = () => {
             created_at: new Date().toISOString(),
             is_visible: true,
           },
+          { 
+            id: 4, 
+            rating: 3, 
+            comment: 'خدمة مقبولة، لكن كان في بعض الأخطاء',
+            client_name: 'نورا إبراهيم',
+            profession: 'دهان',
+            created_at: new Date().toISOString(),
+            is_visible: true,
+          },
+          { 
+            id: 5, 
+            rating: 5, 
+            comment: 'سعر منصف وشغل نظيف، أنصح به',
+            client_name: 'علي حسن',
+            profession: 'فني تكييف',
+            created_at: new Date().toISOString(),
+            is_visible: true,
+          },
         ];
         
         setReviews(fallbackReviews);
@@ -175,12 +170,12 @@ const ReviewsListPage = () => {
       setLoading(false);
     };
     loadReviews();
-  }, [lang, pagination.current_page]);
+  }, [lang]);
 
   // ========== Translations ==========
   const t = {
-    title: lang === 'ar' ? 'التقييمات' : 'Reviews',
-    subtitle: lang === 'ar' ? 'اطلع على آراء وتقييمات العملاء' : 'Check out customer ratings and reviews',
+    title: lang === 'ar' ? '📝 تقييمات العملاء' : '📝 Customer Reviews',
+    subtitle: lang === 'ar' ? 'شوف آراء العملاء عن الحرفيين' : 'See what customers say about craftsmen',
     totalReviews: (count) => lang === 'ar' ? `${count} تقييم` : `${count} reviews`,
     outOf5: lang === 'ar' ? 'من 5' : 'out of 5',
     all: lang === 'ar' ? 'الكل' : 'All',
@@ -190,18 +185,16 @@ const ReviewsListPage = () => {
     lowest: lang === 'ar' ? 'الأقل تقييماً' : 'Lowest Rated',
     helpful: lang === 'ar' ? 'مفيد' : 'Helpful',
     loading: lang === 'ar' ? 'جاري تحميل التقييمات...' : 'Loading reviews...',
-    noReviews: lang === 'ar' ? 'لا توجد تقييمات' : 'No reviews',
+    noReviews: lang === 'ar' ? 'لا توجد تقييمات حالياً' : 'No reviews yet',
     searchPlaceholder: lang === 'ar' ? 'ابحث في التقييمات...' : 'Search reviews...',
     ratingDistribution: lang === 'ar' ? 'توزيع التقييمات' : 'Rating Distribution',
     averageRating: lang === 'ar' ? 'متوسط التقييم' : 'Average Rating',
-    totalCount: lang === 'ar' ? 'إجمالي التقييمات' : 'Total Reviews',
-    stars: (count) => lang === 'ar' ? `${count} نجوم` : `${count} stars`,
     viewProfile: lang === 'ar' ? 'عرض الملف' : 'View Profile',
     back: lang === 'ar' ? 'العودة' : 'Back',
     error: lang === 'ar' ? 'حدث خطأ' : 'Error',
     retry: lang === 'ar' ? 'إعادة المحاولة' : 'Retry',
-    craftsman: lang === 'ar' ? 'الحرفي' : 'Craftsman',
-    reviewBy: lang === 'ar' ? 'تقييم من' : 'Review by',
+    loginToReview: lang === 'ar' ? 'سجل دخول لتضيف تقييمك' : 'Login to add your review',
+    noReviewsFound: lang === 'ar' ? 'لا توجد تقييمات تطابق بحثك' : 'No reviews match your search',
   };
 
   // ========== Filter and Sort ==========
@@ -265,6 +258,7 @@ const ReviewsListPage = () => {
       minHeight: '100vh',
       fontFamily: "'Cairo', sans-serif",
       direction: lang === 'ar' ? 'rtl' : 'ltr',
+      paddingTop: '80px',
     }}>
       <style>{`
         @keyframes fadeInUp {
@@ -288,7 +282,6 @@ const ReviewsListPage = () => {
         .delay-100 { animation-delay: 0.1s; }
         .delay-200 { animation-delay: 0.2s; }
         .delay-300 { animation-delay: 0.3s; }
-        .delay-400 { animation-delay: 0.4s; }
         .hover-lift { transition: all 0.3s ease; }
         .hover-lift:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
         .skeleton {
@@ -299,6 +292,7 @@ const ReviewsListPage = () => {
         @media (max-width: 768px) {
           .stats-container { flex-direction: column !important; }
           .filters-row { flex-wrap: wrap !important; }
+          .review-card { padding: 16px !important; }
         }
       `}</style>
 
@@ -308,9 +302,31 @@ const ReviewsListPage = () => {
           ? 'linear-gradient(160deg, #1e3a8a, #1e40af)'
           : 'linear-gradient(160deg, #2563eb, #1d4ed8)',
         color: 'white',
-        padding: '32px 0',
+        padding: '40px 0 32px',
+        position: 'relative',
+        overflow: 'hidden',
       }}>
-        <div style={{ maxWidth: '900px', margin: '0 auto', padding: '0 24px' }}>
+        {/* Decorative elements */}
+        <div style={{
+          position: 'absolute',
+          top: '-50px',
+          right: '-50px',
+          width: '200px',
+          height: '200px',
+          borderRadius: '50%',
+          background: 'rgba(255,255,255,0.05)',
+        }} />
+        <div style={{
+          position: 'absolute',
+          bottom: '-80px',
+          left: '-30px',
+          width: '150px',
+          height: '150px',
+          borderRadius: '50%',
+          background: 'rgba(255,255,255,0.03)',
+        }} />
+        
+        <div style={{ maxWidth: '900px', margin: '0 auto', padding: '0 24px', position: 'relative', zIndex: 1 }}>
           <div className="animate-fade-in-up" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button 
               onClick={() => navigate(-1)} 
@@ -325,15 +341,18 @@ const ReviewsListPage = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                transition: 'all 0.3s ease',
               }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.25)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.15)'}
             >
               <ArrowLeft size={20} />
             </button>
             <div>
-              <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>
-                📝 {t.title}
+              <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {t.title}
               </h1>
-              <p style={{ fontSize: '0.85rem', opacity: 0.85, margin: '2px 0 0' }}>
+              <p style={{ fontSize: '0.9rem', opacity: 0.85, margin: '4px 0 0' }}>
                 {t.totalReviews(total)} • {t.averageRating}: {avg} ⭐
               </p>
             </div>
@@ -344,7 +363,7 @@ const ReviewsListPage = () => {
       <div style={{
         maxWidth: '900px',
         margin: '0 auto',
-        padding: '32px 24px',
+        padding: '24px 24px 48px',
       }}>
         
         {/* Error */}
@@ -385,9 +404,10 @@ const ReviewsListPage = () => {
         <div className="animate-fade-in-up delay-100" style={{
           background: cardBg,
           borderRadius: '20px',
-          padding: '32px',
+          padding: '28px 32px',
           border: `1px solid ${borderColor}`,
           marginBottom: '24px',
+          boxShadow: darkMode ? '0 4px 16px rgba(0,0,0,0.2)' : '0 4px 16px rgba(0,0,0,0.05)',
         }}>
           <div className="stats-container" style={{
             display: 'flex',
@@ -419,7 +439,7 @@ const ReviewsListPage = () => {
                 {[1, 2, 3, 4, 5].map(i => (
                   <Star
                     key={i}
-                    size={14}
+                    size={16}
                     fill={i <= Math.round(avg) ? starColor : 'none'}
                     color={i <= Math.round(avg) ? starColor : '#cbd5e1'}
                   />
@@ -436,10 +456,10 @@ const ReviewsListPage = () => {
             {/* Distribution Bars */}
             <div style={{ flex: 1, minWidth: '250px' }}>
               <h3 style={{
-                fontSize: '0.9rem',
+                fontSize: '0.85rem',
                 fontWeight: 600,
                 color: textColor,
-                marginBottom: '16px',
+                marginBottom: '12px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
@@ -452,7 +472,7 @@ const ReviewsListPage = () => {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '10px',
-                  marginBottom: '8px',
+                  marginBottom: '6px',
                 }}>
                   <span style={{
                     width: '20px',
@@ -530,6 +550,7 @@ const ReviewsListPage = () => {
                 fontWeight: 600,
                 fontSize: '0.85rem',
                 fontFamily: "'Cairo', sans-serif",
+                transition: 'all 0.3s ease',
               }}
             >
               {t.all}
@@ -551,6 +572,7 @@ const ReviewsListPage = () => {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '4px',
+                  transition: 'all 0.3s ease',
                 }}
               >
                 {s} <Star size={12} fill={filter === s ? 'white' : starColor} color={filter === s ? 'white' : starColor} />
@@ -622,22 +644,23 @@ const ReviewsListPage = () => {
         {/* Reviews List */}
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {[1, 2, 3].map(i => (
-              <div key={i} className="skeleton" style={{ borderRadius: '14px', height: '100px' }} />
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="skeleton" style={{ borderRadius: '14px', height: '120px' }} />
             ))}
           </div>
         ) : filtered.length > 0 ? (
           filtered.map((r, index) => (
             <div
               key={r.id}
-              className="animate-fade-in-up hover-lift"
+              className="review-card animate-fade-in-up hover-lift"
               style={{
                 background: cardBg,
                 borderRadius: '14px',
-                padding: '20px',
+                padding: '20px 24px',
                 border: `1px solid ${borderColor}`,
                 marginBottom: '12px',
                 animationDelay: `${index * 0.05}s`,
+                transition: 'all 0.3s ease',
               }}
             >
               <div style={{
@@ -664,7 +687,7 @@ const ReviewsListPage = () => {
                     {(r.client_name || 'U')[0].toUpperCase()}
                   </div>
                   <div>
-                    <strong style={{ fontSize: '0.9rem', color: textColor }}>
+                    <strong style={{ fontSize: '0.95rem', color: textColor }}>
                       {r.client_name || (lang === 'ar' ? 'مستخدم' : 'User')}
                     </strong>
                     <div style={{ fontSize: '0.75rem', color: textSecondary, display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -678,7 +701,7 @@ const ReviewsListPage = () => {
                   display: 'flex',
                   gap: '2px',
                   background: darkMode ? 'rgba(245,158,11,0.1)' : '#fffbeb',
-                  padding: '4px 10px',
+                  padding: '4px 12px',
                   borderRadius: '20px',
                 }}>
                   {Array.from({ length: 5 }).map((_, i) => (
@@ -705,11 +728,11 @@ const ReviewsListPage = () => {
 
               <p style={{
                 color: textSecondary,
-                fontSize: '0.85rem',
+                fontSize: '0.9rem',
                 lineHeight: 1.8,
-                marginBottom: '10px',
+                marginBottom: '12px',
               }}>
-                "{r.comment || r.message || (lang === 'ar' ? 'لا يوجد تعليق' : 'No comment')}"
+                "{r.comment || (lang === 'ar' ? 'لا يوجد تعليق' : 'No comment')}"
               </p>
 
               <div style={{
@@ -723,56 +746,59 @@ const ReviewsListPage = () => {
                   fontSize: '0.75rem',
                   color: textSecondary,
                   background: darkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc',
-                  padding: '4px 10px',
+                  padding: '4px 12px',
                   borderRadius: '8px',
                 }}>
                   🛠️ {r.profession || (lang === 'ar' ? 'خدمة منزلية' : 'Home Service')}
                 </span>
 
-                {r.craftsman_id && (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {r.craftsman_id && (
+                    <Link
+                      to={`/craftsman/${r.craftsman_id}`}
+                      style={{
+                        padding: '4px 12px',
+                        borderRadius: '8px',
+                        border: `1px solid ${accentColor}`,
+                        background: darkMode ? 'rgba(59,130,246,0.1)' : '#eff6ff',
+                        cursor: 'pointer',
+                        color: accentColor,
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        fontFamily: "'Cairo', sans-serif",
+                        textDecoration: 'none',
+                        transition: 'all 0.3s ease',
+                      }}
+                      onMouseEnter={(e) => { e.target.style.background = accentColor; e.target.style.color = 'white'; }}
+                      onMouseLeave={(e) => { e.target.style.background = darkMode ? 'rgba(59,130,246,0.1)' : '#eff6ff'; e.target.style.color = accentColor; }}
+                    >
+                      {t.viewProfile}
+                    </Link>
+                  )}
+
                   <button
-                    onClick={() => navigate(`/craftsman/${r.craftsman_id}`)}
+                    onClick={() => handleHelpful(r.id)}
                     style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
                       padding: '4px 12px',
                       borderRadius: '8px',
-                      border: `1px solid ${accentColor}`,
-                      background: darkMode ? 'rgba(59,130,246,0.1)' : '#eff6ff',
-                      cursor: 'pointer',
-                      color: accentColor,
+                      border: `1px solid ${borderColor}`,
+                      background: helpfulClicked.includes(r.id) ? (darkMode ? 'rgba(5,150,105,0.15)' : '#d1fae5') : 'transparent',
+                      cursor: helpfulClicked.includes(r.id) ? 'default' : 'pointer',
+                      color: helpfulClicked.includes(r.id) ? '#059669' : textSecondary,
                       fontSize: '0.75rem',
                       fontWeight: 600,
                       fontFamily: "'Cairo', sans-serif",
                       transition: 'all 0.3s ease',
                     }}
-                    onMouseEnter={(e) => { e.target.style.background = accentColor; e.target.style.color = 'white'; }}
-                    onMouseLeave={(e) => { e.target.style.background = darkMode ? 'rgba(59,130,246,0.1)' : '#eff6ff'; e.target.style.color = accentColor; }}
                   >
-                    {t.viewProfile}
+                    <ThumbsUp size={14} />
+                    {t.helpful}
+                    {helpfulClicked.includes(r.id) && <CheckCircle size={14} />}
                   </button>
-                )}
-
-                <button
-                  onClick={() => handleHelpful(r.id)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '4px 12px',
-                    borderRadius: '8px',
-                    border: `1px solid ${borderColor}`,
-                    background: helpfulClicked.includes(r.id) ? (darkMode ? 'rgba(5,150,105,0.15)' : '#d1fae5') : 'transparent',
-                    cursor: helpfulClicked.includes(r.id) ? 'default' : 'pointer',
-                    color: helpfulClicked.includes(r.id) ? '#059669' : textSecondary,
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    fontFamily: "'Cairo', sans-serif",
-                    transition: 'all 0.3s ease',
-                  }}
-                >
-                  <ThumbsUp size={14} />
-                  {t.helpful}
-                  {helpfulClicked.includes(r.id) && <CheckCircle size={14} />}
-                </button>
+                </div>
               </div>
             </div>
           ))
@@ -780,20 +806,69 @@ const ReviewsListPage = () => {
           <div className="animate-fade-in" style={{
             textAlign: 'center',
             padding: '60px 20px',
-            color: textSecondary,
             background: cardBg,
             borderRadius: '14px',
             border: `1px solid ${borderColor}`,
           }}>
             <MessageSquare size={48} style={{ opacity: 0.3, marginBottom: '16px' }} />
-            <p style={{ fontSize: '1.1rem', fontWeight: 500 }}>
-              {t.noReviews}
+            <p style={{ fontSize: '1.1rem', fontWeight: 500, color: textColor }}>
+              {searchQuery ? t.noReviewsFound : t.noReviews}
             </p>
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                style={{
+                  marginTop: '12px',
+                  padding: '8px 24px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: accentColor,
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontFamily: "'Cairo', sans-serif",
+                  fontWeight: 600,
+                }}
+              >
+                {t.all}
+              </button>
+            )}
           </div>
         )}
+
+        {/* ✅ دعوة للتسجيل */}
+        <div className="animate-fade-in-up delay-300" style={{
+          marginTop: '32px',
+          textAlign: 'center',
+          padding: '24px',
+          background: darkMode ? 'rgba(59,130,246,0.05)' : '#eff6ff',
+          borderRadius: '14px',
+          border: `1px solid ${borderColor}`,
+        }}>
+          <p style={{ color: textSecondary, marginBottom: '12px' }}>
+            {t.loginToReview}
+          </p>
+          <Link
+            to="/login"
+            style={{
+              display: 'inline-block',
+              padding: '10px 32px',
+              borderRadius: '10px',
+              background: accentColor,
+              color: 'white',
+              textDecoration: 'none',
+              fontWeight: 700,
+              fontFamily: "'Cairo', sans-serif",
+              transition: 'all 0.3s ease',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#1d4ed8'}
+            onMouseLeave={(e) => e.currentTarget.style.background = accentColor}
+          >
+            {lang === 'ar' ? 'سجل دخول الآن' : 'Login Now'}
+          </Link>
+        </div>
       </div>
     </div>
   );
 };
 
-export default ReviewsListPage;
+export default PublicReviewsPage;

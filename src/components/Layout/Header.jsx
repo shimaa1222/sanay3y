@@ -6,7 +6,7 @@ import { useTheme } from '../../context/ThemeContext';
 import notificationService from '../../services/notificationService';
 import { 
   Wrench, Moon, Sun, Globe, Download, LogOut, Bell, 
-  Search, Star, LayoutDashboard, Calendar 
+  Search, Star, LayoutDashboard, Calendar, FileText 
 } from 'lucide-react';
 
 const Header = () => {
@@ -106,6 +106,19 @@ const Header = () => {
     return '/';
   };
 
+  // ✅ تحديد مسار التقييمات حسب حالة تسجيل الدخول
+  const getReviewsPath = () => {
+    if (isAuthenticated) {
+      return '/my-reviews';
+    }
+    return '/reviews';
+  };
+
+  // ✅ مسار طلباتي للحرفي
+  const getRequestsPath = () => {
+    return '/craftsman/requests';
+  };
+
   const t = {
     home: lang === 'ar' ? 'الرئيسية' : 'Home',
     about: lang === 'ar' ? 'عن المنصة' : 'About',
@@ -120,6 +133,7 @@ const Header = () => {
     notifications: lang === 'ar' ? 'الإشعارات' : 'Notifications',
     dashboard: lang === 'ar' ? 'لوحة التحكم' : 'Dashboard',
     myBookings: lang === 'ar' ? 'حجوزاتي' : 'My Bookings',
+    myRequests: lang === 'ar' ? 'طلباتي' : 'My Requests',
   };
 
   const headerBg = darkMode ? (scrolled ? 'rgba(15, 23, 42, 0.98)' : '#0f172a') : (scrolled ? 'rgba(255, 255, 255, 0.98)' : '#ffffff');
@@ -167,16 +181,16 @@ const Header = () => {
           {/* ✅ الخدمات - للعميل فقط */}
           {isCustomer && <Link to="/search" style={navLinkStyle(isActive('/search'), darkMode)}><Search size={14} style={{ display: 'inline', marginLeft: '4px' }} />{t.services}</Link>}
           
-          {/* ✅ التقييمات - للعميل والحرفي */}
-          {(isCustomer || isCraftsman) && <Link to="/reviews" style={navLinkStyle(isActive('/reviews'), darkMode)}><Star size={14} style={{ display: 'inline', marginLeft: '4px' }} />{t.reviews}</Link>}
+          {/* ✅ التقييمات - للجميع */}
+          <Link to={getReviewsPath()} style={navLinkStyle(
+            isActive('/reviews') || isActive('/my-reviews'), 
+            darkMode
+          )}>
+            <Star size={14} style={{ display: 'inline', marginLeft: '4px' }} />
+            {t.reviews}
+          </Link>
           
-          {/* ✅ حجوزاتي للعميل */}
-          {isCustomer && (
-            <Link to="/my-bookings" style={navLinkStyle(isActive('/my-bookings'), darkMode)}>
-              <Calendar size={14} style={{ display: 'inline', marginLeft: '4px' }} />
-              {t.myBookings}
-            </Link>
-          )}
+          
 
           {/* ✅ عن المنصة - تظهر فقط قبل تسجيل الدخول */}
           {!isAuthenticated && (

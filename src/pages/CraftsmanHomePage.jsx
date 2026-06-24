@@ -10,15 +10,23 @@ import {
   Clock, CheckCircle, XCircle, TrendingUp,
   Users, Wrench, DollarSign, ArrowRight,
   Bell, Settings, Award, BarChart3, Loader,
-  Sparkles, AlertCircle, RefreshCw, Eye, User
+  Sparkles, AlertCircle, RefreshCw, Eye, User,
+  FileText, MessageCircle
 } from 'lucide-react';
 
 const CraftsmanHomePage = () => {
   const { user } = useAuth();
   const { darkMode } = useTheme();
   const [lang, setLang] = useState('ar');
-  const [requests, setRequests] = useState([]);
-  const [loading, setLoading] = useState(true);
+  
+  // ✅ طلبات خاصة (Bookings) - حجوزات موجهة للحرفي
+  const [myBookings, setMyBookings] = useState([]);
+  const [bookingsLoading, setBookingsLoading] = useState(true);
+  
+  // ✅ طلبات عامة (Service Posts) - منشورات في نفس المهنة
+  const [servicePosts, setServicePosts] = useState([]);
+  const [postsLoading, setPostsLoading] = useState(true);
+  
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({ 
     pending: 0, 
@@ -31,6 +39,7 @@ const CraftsmanHomePage = () => {
   });
   const [actionLoading, setActionLoading] = useState({});
   const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [craftsmanId, setCraftsmanId] = useState(null);
 
   // Language
   useEffect(() => {
@@ -41,9 +50,9 @@ const CraftsmanHomePage = () => {
     return () => window.removeEventListener('languagechange', handleLanguageChange);
   }, []);
 
-  // ✅ Load requests from API
-  const loadRequests = useCallback(async () => {
-    setLoading(true);
+  // ✅ Load all data
+  const loadAllData = useCallback(async () => {
+    setRefreshing(true);
     try {
       // 1. جلب إحصائيات الحرفي
       const statsData = await api.getCraftsmanStats();
@@ -57,68 +66,79 @@ const CraftsmanHomePage = () => {
         is_featured: statsData.stats?.is_featured || false,
       });
       
-      // 2. جلب حجوزات الحرفي
-      const bookingsData = await api.getCraftsmanBookings();
-      const allBookings = bookingsData.bookings?.data || [];
+      // 2. جلب الحجوزات الخاصة (Bookings)
+      await loadMyBookings();
       
-      // عرض الطلبات قيد الانتظار فقط في القائمة الرئيسية
-      const pendingBookings = allBookings.filter(b => b.status === 'pending');
-      setRequests(pendingBookings);
+      // 3. جلب منشورات الخدمات العامة (Service Posts)
+      await loadServicePosts();
       
     } catch (error) {
       console.error('Error loading craftsman data:', error);
-      // ✅ Fallback data
-      const fallbackRequests = [
-        { 
-          id: 1, 
-          service_type: 'تركيب مطبخ', 
-          customer_name: 'أحمد محمد', 
-          location: 'القاهرة', 
-          date: '2026-06-20', 
-          time: '14:30', 
-          budget: 200,
-          status: 'pending',
-          description: 'محتاج تركيب مطبخ جديد'
-        },
-        { 
-          id: 2, 
-          service_type: 'سباكة', 
-          customer_name: 'سارة علي', 
-          location: 'الجيزة', 
-          date: '2026-06-21', 
-          time: '10:00', 
-          budget: 150,
-          status: 'pending',
-          description: 'تسريب مياه في الحمام'
-        },
-      ];
-      setRequests(fallbackRequests);
-      setStats({
-        pending: fallbackRequests.length,
-        completed: 0,
-        total: fallbackRequests.length,
-        earnings: 0,
-        rating: 0,
-        reviews_count: 0,
-        is_featured: false,
-      });
     }
-    setLoading(false);
     setRefreshing(false);
   }, []);
 
+  // ✅ جلب الحجوزات الخاصة - GET /craftsman/bookings
+  const loadMyBookings = async () => {
+    setBookingsLoading(true);
+    try {
+      const bookingsData = await api.getCraftsmanBookings();
+      const allBookings = bookingsData.bookings?.data || [];
+      
+      // عرض الحجوزات قيد الانتظار فقط في القائمة الرئيسية
+      const pendingBookings = allBookings.filter(b => b.status === 'pending');
+      setMyBookings(pendingBookings);
+      
+      // تحديث الإحصائيات
+      setStats(prev => ({
+        ...prev,
+        pending: pendingBookings.length,
+      }));
+      
+    } catch (error) {
+      console.error('Error loading bookings:', error);
+      setMyBookings([]);
+    }
+    setBookingsLoading(false);
+  };
+
+  // ✅ جلب منشورات الخدمات العامة - GET /craftsman/service-posts
+  const loadServicePosts = async () => {
+    setPostsLoading(true);
+    try {
+      // جلب بيانات الحرفي للحصول على المدينة والمهنة
+      const meData = await api.getMe();
+      const craftsman = meData.user?.craftsman;
+      
+      if (craftsman) {
+        setCraftsmanId(craftsman.id);
+        const postsData = await api.getServicePosts({
+          city: craftsman.city,
+          craft_id: craftsman.crafts?.[0]?.id || '',
+          per_page: 20,
+        });
+        setServicePosts(postsData.posts?.data || []);
+      } else {
+        setServicePosts([]);
+      }
+    } catch (error) {
+      console.error('Error loading service posts:', error);
+      setServicePosts([]);
+    }
+    setPostsLoading(false);
+  };
+
   useEffect(() => {
-    loadRequests();
+    loadAllData();
     
     // Refresh every 30 seconds
-    const interval = setInterval(loadRequests, 30000);
+    const interval = setInterval(loadAllData, 30000);
     return () => clearInterval(interval);
-  }, [loadRequests]);
+  }, [loadAllData]);
 
   // Handle refresh
   const handleRefresh = () => {
-    setRefreshing(true);
-    loadRequests();
+    loadAllData();
   };
 
   // Show feedback message
@@ -127,16 +147,16 @@ const CraftsmanHomePage = () => {
     setTimeout(() => setFeedbackMessage(''), 3000);
   };
 
-  // ✅ Accept booking - باستخدام updateBookingStatus
-  const handleAccept = async (bookingId) => {
-    setActionLoading(prev => ({ ...prev, [bookingId]: 'accept' }));
+  // ✅ قبول حجز (Booking) - PATCH /craftsman/bookings/{id}/status
+  const handleAcceptBooking = async (bookingId) => {
+    setActionLoading(prev => ({ ...prev, [`booking_${bookingId}`]: 'accept' }));
     
     try {
       await api.updateBookingStatus(bookingId, 'confirmed');
       showFeedback(lang === 'ar' ? '✅ تم قبول الطلب بنجاح!' : '✅ Request accepted successfully!');
       
-      // Update local state
-      setRequests(prev => prev.filter(r => r.id !== bookingId));
+      // تحديث القائمة
+      setMyBookings(prev => prev.filter(r => r.id !== bookingId));
       setStats(prev => ({
         ...prev,
         pending: prev.pending - 1,
@@ -144,37 +164,67 @@ const CraftsmanHomePage = () => {
       }));
     } catch (error) {
       console.error('Accept error:', error);
-      // Fallback for demo
-      setRequests(prev => prev.filter(r => r.id !== bookingId));
-      showFeedback(lang === 'ar' ? '✅ تم قبول الطلب!' : '✅ Request accepted!');
+      showFeedback(error.message || (lang === 'ar' ? '❌ حدث خطأ' : '❌ Error occurred'));
     }
     
-    setActionLoading(prev => ({ ...prev, [bookingId]: null }));
+    setActionLoading(prev => ({ ...prev, [`booking_${bookingId}`]: null }));
   };
 
-  // ✅ Reject booking - باستخدام updateBookingStatus
-  const handleReject = async (bookingId) => {
-    setActionLoading(prev => ({ ...prev, [bookingId]: 'reject' }));
+  // ✅ رفض حجز (Booking) - PATCH /craftsman/bookings/{id}/status
+  const handleRejectBooking = async (bookingId) => {
+    setActionLoading(prev => ({ ...prev, [`booking_${bookingId}`]: 'reject' }));
+    
+    const reason = prompt(lang === 'ar' ? 'اكتب سبب الرفض (اختياري):' : 'Enter rejection reason (optional):');
     
     try {
-      await api.updateBookingStatus(bookingId, 'rejected', 'الميعاد غير مناسب');
+      await api.updateBookingStatus(bookingId, 'rejected', reason || 'غير متاح');
       showFeedback(lang === 'ar' ? '❌ تم رفض الطلب' : '❌ Request rejected');
       
-      // Update local state
-      setRequests(prev => prev.filter(r => r.id !== bookingId));
+      // تحديث القائمة
+      setMyBookings(prev => prev.filter(r => r.id !== bookingId));
       setStats(prev => ({
         ...prev,
-        pending: prev.pending - 1,
-        total: prev.total - 1
+        pending: prev.pending - 1
       }));
     } catch (error) {
       console.error('Reject error:', error);
-      // Fallback for demo
-      setRequests(prev => prev.filter(r => r.id !== bookingId));
-      showFeedback(lang === 'ar' ? '❌ تم رفض الطلب' : '❌ Request rejected');
+      showFeedback(error.message || (lang === 'ar' ? '❌ حدث خطأ' : '❌ Error occurred'));
     }
     
-    setActionLoading(prev => ({ ...prev, [bookingId]: null }));
+    setActionLoading(prev => ({ ...prev, [`booking_${bookingId}`]: null }));
+  };
+
+  // ✅ الرد على منشور خدمة (Service Post) - POST /craftsman/service-posts/{id}/respond
+  const handleRespondToPost = async (postId) => {
+    setActionLoading(prev => ({ ...prev, [`post_${postId}`]: 'respond' }));
+    
+    const message = prompt(lang === 'ar' ? 'اكتب عرضك للحرفي:' : 'Write your offer to the craftsman:');
+    if (!message) {
+      setActionLoading(prev => ({ ...prev, [`post_${postId}`]: null }));
+      return;
+    }
+    
+    const price = prompt(lang === 'ar' ? 'السعر المقترح (اختياري):' : 'Offered price (optional):');
+    const days = prompt(lang === 'ar' ? 'عدد الأيام المتوقعة (اختياري):' : 'Estimated days (optional):');
+    
+    try {
+      const responseData = {
+        message: message,
+        offered_price: price ? parseFloat(price) : undefined,
+        estimated_days: days ? parseInt(days) : undefined,
+      };
+      
+      await api.respondToServicePost(postId, responseData);
+      showFeedback(lang === 'ar' ? '✅ تم إرسال ردك بنجاح!' : '✅ Response sent successfully!');
+      
+      // تحديث القائمة - إخفاء المنشور الذي تم الرد عليه
+      setServicePosts(prev => prev.filter(p => p.id !== postId));
+    } catch (error) {
+      console.error('Respond error:', error);
+      showFeedback(error.message || (lang === 'ar' ? '❌ حدث خطأ' : '❌ Error occurred'));
+    }
+    
+    setActionLoading(prev => ({ ...prev, [`post_${postId}`]: null }));
   };
 
   // Translations
@@ -186,7 +236,7 @@ const CraftsmanHomePage = () => {
     total: lang === 'ar' ? 'إجمالي الطلبات' : 'Total Requests',
     earnings: lang === 'ar' ? 'الأرباح' : 'Earnings',
     egp: lang === 'ar' ? 'ج.م' : 'EGP',
-    incomingRequests: lang === 'ar' ? 'الطلبات الواردة' : 'Incoming Requests',
+    incomingRequests: lang === 'ar' ? 'طلباتي الخاصة' : 'My Requests',
     noRequests: lang === 'ar' ? 'لا توجد طلبات جديدة 🎉' : 'No new requests 🎉',
     noRequestsDesc: lang === 'ar' ? 'كل الطلبات الجديدة هتظهر هنا' : 'All new requests will appear here',
     loading: lang === 'ar' ? 'جاري التحميل...' : 'Loading...',
@@ -204,6 +254,13 @@ const CraftsmanHomePage = () => {
     description: lang === 'ar' ? 'الوصف' : 'Description',
     rating: lang === 'ar' ? 'التقييم' : 'Rating',
     featured: lang === 'ar' ? 'مميز' : 'Featured',
+    generalRequests: lang === 'ar' ? 'طلبات عامة' : 'General Requests',
+    generalRequestsDesc: lang === 'ar' ? 'طلبات من عملاء يبحثون عن حرفي' : 'Requests from clients looking for a craftsman',
+    noGeneralRequests: lang === 'ar' ? 'لا توجد طلبات عامة' : 'No general requests',
+    respond: lang === 'ar' ? 'رد' : 'Respond',
+    alreadyResponded: lang === 'ar' ? 'تم الرد' : 'Responded',
+    budget: lang === 'ar' ? 'الميزانية' : 'Budget',
+    urgency: lang === 'ar' ? 'الإلحاح' : 'Urgency',
   };
 
   // Dynamic colors
@@ -228,6 +285,9 @@ const CraftsmanHomePage = () => {
     background: bg, transition: 'all 0.3s ease',
   });
 
+  // ✅ حساب عدد الطلبات العامة غير المستجابة
+  const pendingPosts = servicePosts.filter(p => !p.already_responded).length;
+
   return (
     <div style={{ background: bgColor, minHeight: '100vh', fontFamily: "'Cairo', sans-serif", direction: lang === 'ar' ? 'rtl' : 'ltr' }}>
       <style>{`
@@ -236,6 +296,7 @@ const CraftsmanHomePage = () => {
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
         
         .animate-fade-in-up { animation: fadeInUp 0.5s ease forwards; }
         .animate-fade-in { animation: fadeIn 0.3s ease forwards; }
@@ -254,6 +315,12 @@ const CraftsmanHomePage = () => {
         
         .btn-reject { transition: all 0.3s ease; }
         .btn-reject:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(220,38,38,0.3); }
+        
+        .skeleton {
+          background: linear-gradient(90deg, ${darkMode ? '#334155' : '#e2e8f0'} 25%, ${darkMode ? '#1e293b' : '#f1f5f9'} 50%, ${darkMode ? '#334155' : '#e2e8f0'} 75%);
+          background-size: 200% 100%;
+          animation: shimmer 1.5s infinite;
+        }
         
         @media (max-width: 768px) {
           .stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
@@ -292,7 +359,11 @@ const CraftsmanHomePage = () => {
             </div>
             <div>
               <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0 }}>{t.welcome}، {user?.name}</h1>
-              <p style={{ fontSize: '1rem', opacity: 0.9, margin: '4px 0 0' }}>{t.newRequests(stats.pending)}</p>
+              <p style={{ fontSize: '1rem', opacity: 0.9, margin: '4px 0 0' }}>
+                {stats.pending > 0 
+                  ? t.newRequests(stats.pending)
+                  : (lang === 'ar' ? '🎉 لا توجد طلبات جديدة' : '🎉 No new requests')}
+              </p>
               {stats.is_featured && (
                 <span style={{ 
                   display: 'inline-block', marginTop: '8px', 
@@ -334,7 +405,9 @@ const CraftsmanHomePage = () => {
         {/* Content Grid */}
         <div className="content-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '24px' }}>
           
-          {/* Requests */}
+          {/* ============================================================
+               ✅ طلباتي الخاصة (Bookings)
+               ============================================================ */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h2 className="animate-fade-in-up" style={{
@@ -367,20 +440,14 @@ const CraftsmanHomePage = () => {
               </button>
             </div>
 
-            {loading ? (
+            {bookingsLoading ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {[1, 2, 3].map(i => (
-                  <div key={i} style={{
-                    background: cardBg, borderRadius: '14px', height: '140px',
-                    border: `1px solid ${borderColor}`,
-                    background: `linear-gradient(90deg, ${darkMode ? '#334155' : '#e2e8f0'} 25%, ${darkMode ? '#1e293b' : '#f1f5f9'} 50%, ${darkMode ? '#334155' : '#e2e8f0'} 75%)`,
-                    backgroundSize: '200% 100%',
-                    animation: 'shimmer 1.5s infinite',
-                  }} />
+                  <div key={i} className="skeleton" style={{ borderRadius: '14px', height: '140px' }} />
                 ))}
               </div>
-            ) : requests.length > 0 ? (
-              requests.map((r, index) => (
+            ) : myBookings.length > 0 ? (
+              myBookings.map((r, index) => (
                 <div key={r.id} className="animate-fade-in-up hover-lift" style={{
                   background: cardBg, borderRadius: '14px', padding: '20px',
                   border: `1px solid ${borderColor}`, marginBottom: '12px',
@@ -390,7 +457,7 @@ const CraftsmanHomePage = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
                     <div>
                       <h3 style={{ fontWeight: 700, color: textColor, fontSize: '1rem', marginBottom: '4px' }}>
-                        {r.service?.title || r.service_type || r.service_title || (lang === 'ar' ? 'خدمة' : 'Service')}
+                        {r.service?.title || r.service_title || (lang === 'ar' ? 'خدمة' : 'Service')}
                       </h3>
                       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', fontSize: '0.8rem', color: textSecondary }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -426,7 +493,7 @@ const CraftsmanHomePage = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '0.85rem', color: textSecondary }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: '#059669' }}>
                         <DollarSign size={14} />
-                        {r.total_price || r.service_price || r.budget || 0} {t.egp}
+                        {r.total_price || r.service_price || r.price || 0} {t.egp}
                       </span>
                       {r.booking_time && (
                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -437,12 +504,9 @@ const CraftsmanHomePage = () => {
                     </div>
 
                     <div className="request-actions" style={{ display: 'flex', gap: '8px' }}>
-                      {/* ❌ تم إزالة زر الشات */}
-
-                      {/* Reject Button */}
                       <button 
-                        onClick={() => handleReject(r.id)}
-                        disabled={actionLoading[r.id] === 'reject'}
+                        onClick={() => handleRejectBooking(r.id)}
+                        disabled={actionLoading[`booking_${r.id}`] === 'reject'}
                         className="btn-reject"
                         style={{
                           display: 'flex', alignItems: 'center', gap: '4px',
@@ -450,22 +514,21 @@ const CraftsmanHomePage = () => {
                           border: '1px solid #dc2626', background: 'transparent',
                           color: '#dc2626', cursor: 'pointer', fontSize: '0.8rem',
                           fontWeight: 600, fontFamily: "'Cairo', sans-serif",
-                          opacity: actionLoading[r.id] ? 0.5 : 1,
+                          opacity: actionLoading[`booking_${r.id}`] ? 0.5 : 1,
                         }}
-                        onMouseEnter={(e) => { if(!actionLoading[r.id]) { e.target.style.background = '#dc2626'; e.target.style.color = 'white'; } }}
+                        onMouseEnter={(e) => { if(!actionLoading[`booking_${r.id}`]) { e.target.style.background = '#dc2626'; e.target.style.color = 'white'; } }}
                         onMouseLeave={(e) => { e.target.style.background = 'transparent'; e.target.style.color = '#dc2626'; }}>
-                        {actionLoading[r.id] === 'reject' ? (
+                        {actionLoading[`booking_${r.id}`] === 'reject' ? (
                           <Loader size={14} className="animate-spin" />
                         ) : (
                           <XCircle size={14} />
                         )}
-                        {actionLoading[r.id] === 'reject' ? t.rejecting : t.reject}
+                        {actionLoading[`booking_${r.id}`] === 'reject' ? t.rejecting : t.reject}
                       </button>
 
-                      {/* Accept Button */}
                       <button 
-                        onClick={() => handleAccept(r.id)}
-                        disabled={actionLoading[r.id] === 'accept'}
+                        onClick={() => handleAcceptBooking(r.id)}
+                        disabled={actionLoading[`booking_${r.id}`] === 'accept'}
                         className="btn-accept"
                         style={{
                           display: 'flex', alignItems: 'center', gap: '4px',
@@ -473,14 +536,14 @@ const CraftsmanHomePage = () => {
                           border: '1px solid #059669', background: '#059669',
                           color: 'white', cursor: 'pointer', fontSize: '0.8rem',
                           fontWeight: 600, fontFamily: "'Cairo', sans-serif",
-                          opacity: actionLoading[r.id] ? 0.7 : 1,
+                          opacity: actionLoading[`booking_${r.id}`] ? 0.7 : 1,
                         }}>
-                        {actionLoading[r.id] === 'accept' ? (
+                        {actionLoading[`booking_${r.id}`] === 'accept' ? (
                           <Loader size={14} className="animate-spin" />
                         ) : (
                           <CheckCircle size={14} />
                         )}
-                        {actionLoading[r.id] === 'accept' ? t.accepting : t.accept}
+                        {actionLoading[`booking_${r.id}`] === 'accept' ? t.accepting : t.accept}
                       </button>
                     </div>
                   </div>
@@ -488,17 +551,124 @@ const CraftsmanHomePage = () => {
               ))
             ) : (
               <div className="animate-fade-in-up" style={{
-                textAlign: 'center', padding: '80px 20px', background: cardBg,
+                textAlign: 'center', padding: '40px 20px', background: cardBg,
                 borderRadius: '14px', border: `1px solid ${borderColor}`,
               }}>
-                <Bell size={56} style={{ opacity: 0.2, color: textSecondary, marginBottom: '16px' }} />
-                <p style={{ color: textColor, fontSize: '1.1rem', fontWeight: 600, marginBottom: '4px' }}>{t.noRequests}</p>
-                <p style={{ color: textSecondary, fontSize: '0.9rem' }}>{t.noRequestsDesc}</p>
+                <Bell size={40} style={{ opacity: 0.2, color: textSecondary, marginBottom: '12px' }} />
+                <p style={{ color: textColor, fontSize: '1rem', fontWeight: 600, marginBottom: '4px' }}>{t.noRequests}</p>
+                <p style={{ color: textSecondary, fontSize: '0.85rem' }}>{t.noRequestsDesc}</p>
               </div>
             )}
+
+            {/* ============================================================
+                 ✅ طلبات عامة (Service Posts)
+                 ============================================================ */}
+            <div style={{ marginTop: '32px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h2 style={{
+                  fontSize: '1.1rem', fontWeight: 700, color: textColor,
+                  display: 'flex', alignItems: 'center', gap: '8px', margin: 0,
+                }}>
+                  <FileText size={20} style={{ color: '#8b5cf6' }} />
+                  {t.generalRequests}
+                  {pendingPosts > 0 && (
+                    <span style={{
+                      background: '#8b5cf6', color: 'white', padding: '2px 10px',
+                      borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700,
+                    }}>
+                      {pendingPosts}
+                    </span>
+                  )}
+                </h2>
+              </div>
+
+              {postsLoading ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {[1, 2].map(i => (
+                    <div key={i} className="skeleton" style={{ borderRadius: '14px', height: '120px' }} />
+                  ))}
+                </div>
+              ) : servicePosts.length > 0 ? (
+                servicePosts.map((post, index) => {
+                  const alreadyResponded = post.already_responded || false;
+                  
+                  return (
+                    <div key={post.id} className="animate-fade-in-up" style={{
+                      background: cardBg, borderRadius: '14px', padding: '16px 20px',
+                      border: `1px solid ${borderColor}`, marginBottom: '10px',
+                      animationDelay: `${index * 0.05}s`,
+                      opacity: alreadyResponded ? 0.6 : 1,
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <div>
+                          <h4 style={{ fontWeight: 600, color: textColor, fontSize: '0.95rem', margin: 0 }}>
+                            {post.title || 'طلب خدمة'}
+                          </h4>
+                          <div style={{ fontSize: '0.75rem', color: textSecondary, display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                            <span>{post.city || ''}</span>
+                            {post.budget_from && post.budget_to && (
+                              <span>💰 {post.budget_from} - {post.budget_to} {t.egp}</span>
+                            )}
+                            {post.urgency && (
+                              <span>⚡ {post.urgency === 'emergency' ? (lang === 'ar' ? 'طوارئ' : 'Emergency') : post.urgency}</span>
+                            )}
+                          </div>
+                        </div>
+                        {alreadyResponded && (
+                          <span style={{
+                            padding: '2px 10px', borderRadius: '12px',
+                            background: '#d1fae5', color: '#059669',
+                            fontSize: '0.65rem', fontWeight: 600,
+                          }}>
+                            ✅ {t.alreadyResponded}
+                          </span>
+                        )}
+                      </div>
+                      
+                      <p style={{ fontSize: '0.8rem', color: textSecondary, marginBottom: '10px', lineHeight: 1.5 }}>
+                        {post.description?.substring(0, 100)}...
+                      </p>
+                      
+                      {!alreadyResponded && (
+                        <button
+                          onClick={() => handleRespondToPost(post.id)}
+                          disabled={actionLoading[`post_${post.id}`] === 'respond'}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '4px',
+                            padding: '6px 14px', borderRadius: '8px',
+                            border: '1px solid #8b5cf6', background: 'transparent',
+                            color: '#8b5cf6', cursor: 'pointer', fontSize: '0.75rem',
+                            fontWeight: 600, fontFamily: "'Cairo', sans-serif",
+                            transition: 'all 0.3s ease',
+                            opacity: actionLoading[`post_${post.id}`] ? 0.5 : 1,
+                          }}
+                          onMouseEnter={(e) => { if(!actionLoading[`post_${post.id}`]) { e.target.style.background = '#8b5cf6'; e.target.style.color = 'white'; } }}
+                          onMouseLeave={(e) => { e.target.style.background = 'transparent'; e.target.style.color = '#8b5cf6'; }}>
+                          {actionLoading[`post_${post.id}`] === 'respond' ? (
+                            <Loader size={12} className="animate-spin" />
+                          ) : (
+                            <MessageCircle size={12} />
+                          )}
+                          {t.respond}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{
+                  textAlign: 'center', padding: '24px', background: cardBg,
+                  borderRadius: '14px', border: `1px solid ${borderColor}`,
+                }}>
+                  <p style={{ color: textSecondary, fontSize: '0.85rem' }}>{t.noGeneralRequests}</p>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Sidebar */}
+          {/* ============================================================
+               Sidebar
+               ============================================================ */}
           <div>
             {/* Quick Links */}
             <div className="animate-fade-in-up delay-200" style={{
@@ -527,17 +697,20 @@ const CraftsmanHomePage = () => {
               border: `1px solid ${borderColor}`, marginBottom: '16px',
             }}>
               <h3 style={{ fontWeight: 700, color: textColor, marginBottom: '12px', fontSize: '0.9rem' }}>
-                {lang === 'ar' ? 'ملخص اليوم' : 'Today\'s Summary'}
+                {lang === 'ar' ? '📊 ملخص اليوم' : '📊 Today\'s Summary'}
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.85rem', color: textSecondary }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{t.pending}</span><span style={{ fontWeight: 700, color: '#f59e0b' }}>{stats.pending}</span>
+                  <span>{t.pending}</span>
+                  <span style={{ fontWeight: 700, color: '#f59e0b' }}>{stats.pending}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{t.completed}</span><span style={{ fontWeight: 700, color: '#059669' }}>{stats.completed}</span>
+                  <span>{t.completed}</span>
+                  <span style={{ fontWeight: 700, color: '#059669' }}>{stats.completed}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${borderColor}`, paddingTop: '8px' }}>
-                  <span>{t.earnings}</span><span style={{ fontWeight: 700, color: '#8b5cf6' }}>{stats.earnings} {t.egp}</span>
+                  <span>{t.earnings}</span>
+                  <span style={{ fontWeight: 700, color: '#8b5cf6' }}>{stats.earnings} {t.egp}</span>
                 </div>
                 {stats.rating > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${borderColor}`, paddingTop: '8px' }}>
@@ -556,7 +729,7 @@ const CraftsmanHomePage = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                 <Sparkles size={18} />
                 <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>
-                  {lang === 'ar' ? 'نصيحة' : 'Tip'}
+                  {lang === 'ar' ? '💡 نصيحة' : '💡 Tip'}
                 </span>
               </div>
               <p style={{ fontSize: '0.85rem', opacity: 0.95, lineHeight: 1.6, margin: 0 }}>

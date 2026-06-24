@@ -2,25 +2,24 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom'; // ✅ إضافة
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { 
   User, Camera, Mail, Phone, MapPin, Home,
-  Save, Lock, Trash2, CheckCircle,
+  Save, Lock, CheckCircle,
   Settings, Heart, Star, Clock, Loader,
-  AlertCircle, Eye, EyeOff // ✅ إضافة
+  AlertCircle, Eye, EyeOff
 } from 'lucide-react';
 
 const CustomerProfilePage = () => {
-  const { user, updateUser, logout } = useAuth(); // ✅ إضافة logout
-  const navigate = useNavigate(); // ✅ إضافة
+  const { user, updateUser } = useAuth();
+  const navigate = useNavigate();
   const { darkMode } = useTheme();
   const [lang, setLang] = useState('ar');
   const [activeTab, setActiveTab] = useState('info');
-  const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(''); // ✅ إضافة
-  const [success, setSuccess] = useState(''); // ✅ إضافة
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [avatar, setAvatar] = useState(null);
   const fileInputRef = useRef(null);
 
@@ -31,6 +30,7 @@ const CustomerProfilePage = () => {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
 
   const [profile, setProfile] = useState({
     firstName: user?.name?.split(' ')[0] || '',
@@ -110,16 +110,14 @@ const CustomerProfilePage = () => {
     newPassword: lang === 'ar' ? 'كلمة المرور الجديدة' : 'New Password',
     confirmPassword: lang === 'ar' ? 'تأكيد كلمة المرور' : 'Confirm Password',
     change: lang === 'ar' ? 'تغيير' : 'Change',
-    deleteAccount: lang === 'ar' ? 'حذف الحساب' : 'Delete Account',
-    deleteWarning: lang === 'ar' ? 'عند حذف حسابك، سيتم حذف جميع بياناتك بشكل نهائي ولا يمكن استعادتها.' : 'Deleting your account will permanently remove all your data and cannot be undone.',
-    delete: lang === 'ar' ? 'حذف الحساب' : 'Delete Account',
     memberSince: lang === 'ar' ? 'عضو منذ' : 'Member since',
     error: lang === 'ar' ? 'حدث خطأ' : 'Error',
     retry: lang === 'ar' ? 'إعادة المحاولة' : 'Retry',
-    passwordChanged: lang === 'ar' ? 'تم تغيير كلمة المرور بنجاح' : 'Password changed successfully',
+    passwordChanged: lang === 'ar' ? '✅ تم تغيير كلمة المرور بنجاح' : '✅ Password changed successfully',
     fillFields: lang === 'ar' ? 'يرجى ملء جميع الحقول' : 'Please fill in all fields',
     passwordMismatch: lang === 'ar' ? 'كلمات المرور غير متطابقة' : 'Passwords do not match',
-    passwordMin: lang === 'ar' ? 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' : 'Password must be at least 6 characters',
+    passwordMin: lang === 'ar' ? 'كلمة المرور يجب أن تكون 8 أحرف على الأقل' : 'Password must be at least 8 characters',
+    loading: lang === 'ar' ? 'جاري التحميل...' : 'Loading...',
   };
 
   // ============================================================
@@ -179,74 +177,76 @@ const CustomerProfilePage = () => {
     } catch (error) {
       console.error('❌ Save error:', error);
       setError(error.message || 'حدث خطأ في حفظ التغييرات');
-      // Fallback - حفظ في localStorage
       localStorage.setItem('customerProfile', JSON.stringify(profile));
     }
     setLoading(false);
   };
 
   // ============================================================
-  // ✅ تغيير كلمة المرور
+  // ✅ تغيير كلمة المرور - متوافق مع الـ API
   // ============================================================
   const handleChangePassword = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    setPasswordLoading(true);
     setError('');
     setSuccess('');
 
+    // ✅ التحقق من البيانات
     if (!currentPassword || !newPassword || !confirmPassword) {
       setError(t.fillFields);
-      setLoading(false);
+      setPasswordLoading(false);
       return;
     }
 
-    if (newPassword.length < 6) {
+    if (newPassword.length < 8) {
       setError(t.passwordMin);
-      setLoading(false);
+      setPasswordLoading(false);
       return;
     }
 
     if (newPassword !== confirmPassword) {
       setError(t.passwordMismatch);
-      setLoading(false);
+      setPasswordLoading(false);
       return;
     }
 
     try {
+      // ✅ استخدام الحقول الصحيحة حسب توثيق الـ API
+      // POST /api/auth/change-password
+      // Body: current_password, password, password_confirmation
       await api.changePassword({
-        old_password: currentPassword,
-        new_password: newPassword,
-        new_password_confirmation: confirmPassword,
+        current_password: currentPassword,
+        password: newPassword,
+        password_confirmation: confirmPassword,
       });
       
       setSuccess(t.passwordChanged);
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setTimeout(() => setSuccess(''), 3000);
+      setTimeout(() => setSuccess(''), 4000);
+      
     } catch (error) {
-      setError(error.message || 'حدث خطأ في تغيير كلمة المرور');
+      console.error('❌ Change password error:', error);
+      
+      // ✅ عرض تفاصيل الخطأ من الـ Backend
+      if (error.errors) {
+        const messages = Object.entries(error.errors)
+          .map(([field, msgs]) => {
+            const fieldNames = {
+              'current_password': 'كلمة المرور الحالية',
+              'password': 'كلمة المرور الجديدة',
+              'password_confirmation': 'تأكيد كلمة المرور',
+            };
+            return `${fieldNames[field] || field}: ${msgs.join(', ')}`;
+          })
+          .join(' | ');
+        setError(messages);
+      } else {
+        setError(error.message || 'حدث خطأ في تغيير كلمة المرور');
+      }
     } finally {
-      setLoading(false);
-    }
-  };
-
-  // ============================================================
-  // ✅ حذف الحساب
-  // ============================================================
-  const handleDeleteAccount = async () => {
-    if (!window.confirm(t.deleteWarning)) return;
-    
-    setLoading(true);
-    setError('');
-    
-    try {
-      await api.deleteAccount();
-      logout();
-      navigate('/');
-    } catch (error) {
-      setError(error.message || 'حدث خطأ في حذف الحساب');
-      setLoading(false);
+      setPasswordLoading(false);
     }
   };
 
@@ -461,7 +461,7 @@ const CustomerProfilePage = () => {
         {activeTab === 'settings' && (
           <div className="animate-fade-in-up">
             {/* ===== Change Password ===== */}
-            <div style={{ background: cardBg, borderRadius: '16px', padding: '32px', border: `1px solid ${borderColor}`, marginBottom: '20px' }}>
+            <div style={{ background: cardBg, borderRadius: '16px', padding: '32px', border: `1px solid ${borderColor}` }}>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: textColor, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Lock size={18} style={{ color: '#3b82f6' }} />{t.changePassword}
               </h3>
@@ -555,54 +555,27 @@ const CustomerProfilePage = () => {
                   </div>
                 </div>
                 
-                <button type="submit" disabled={loading} style={{
+                <button type="submit" disabled={passwordLoading} style={{
                   padding: '12px 28px',
-                  background: loading ? '#94a3b8' : '#3b82f6',
+                  background: passwordLoading ? '#94a3b8' : '#3b82f6',
                   color: 'white',
                   border: 'none',
                   borderRadius: '10px',
                   fontWeight: 600,
-                  cursor: loading ? 'not-allowed' : 'pointer',
+                  cursor: passwordLoading ? 'not-allowed' : 'pointer',
                   fontFamily: "'Cairo', sans-serif",
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  opacity: loading ? 0.7 : 1,
+                  opacity: passwordLoading ? 0.7 : 1,
                 }}>
-                  {loading ? <Loader size={18} className="animate-spin" /> : <Lock size={18} />}
-                  {t.change}
+                  {passwordLoading ? <Loader size={18} className="animate-spin" /> : <Lock size={18} />}
+                  {passwordLoading ? lang === 'ar' ? 'جاري التغيير...' : 'Changing...' : t.change}
                 </button>
               </form>
             </div>
 
-            {/* ===== Delete Account ===== */}
-            <div style={{ background: cardBg, borderRadius: '16px', padding: '32px', border: `1px solid ${borderColor}` }}>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: errorColor, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Trash2 size={18} />{t.deleteAccount}
-              </h3>
-              <p style={{ color: textSecondary, fontSize: '0.9rem', marginBottom: '20px', lineHeight: 1.6 }}>{t.deleteWarning}</p>
-              <button 
-                onClick={handleDeleteAccount}
-                disabled={loading}
-                style={{
-                  padding: '12px 28px',
-                  background: loading ? '#94a3b8' : errorColor,
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '10px',
-                  fontWeight: 600,
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  fontFamily: "'Cairo', sans-serif",
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  opacity: loading ? 0.7 : 1,
-                }}
-              >
-                {loading ? <Loader size={18} className="animate-spin" /> : <Trash2 size={18} />}
-                {t.delete}
-              </button>
-            </div>
+            {/* ❌ تم إزالة زر حذف الحساب لأنه غير مدعوم في الـ Backend */}
           </div>
         )}
       </div>

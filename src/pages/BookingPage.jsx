@@ -30,8 +30,6 @@ const BookingPage = () => {
   const [lang, setLang] = useState('ar');
   const [craftsman, setCraftsman] = useState(null);
   const [nearbyCraftsmen, setNearbyCraftsmen] = useState([]);
-  const [crafts, setCrafts] = useState([]);
-  const [selectedCraft, setSelectedCraft] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState(1);
@@ -41,7 +39,6 @@ const BookingPage = () => {
   const [images, setImages] = useState([]);
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState('');
-  const [selectedServiceId, setSelectedServiceId] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const [showMap, setShowMap] = useState(true);
   const [showNearby, setShowNearby] = useState(false);
@@ -81,31 +78,6 @@ const BookingPage = () => {
     }
   }, []);
 
-  // ========== Load Crafts ==========
-  useEffect(() => {
-    const loadCrafts = async () => {
-      try {
-        const data = await api.getCrafts();
-        setCrafts(data.crafts || []);
-      } catch (error) {
-        console.warn('Could not load crafts:', error);
-        setCrafts([
-          { id: 1, name: 'سباكة', icon: '🔧' },
-          { id: 2, name: 'كهرباء', icon: '⚡' },
-          { id: 3, name: 'نجارة', icon: '🪚' },
-          { id: 4, name: 'دهانات', icon: '🎨' },
-          { id: 5, name: 'تكييف وتبريد', icon: '❄️' },
-          { id: 6, name: 'بلاط وسيراميك', icon: '🏗️' },
-          { id: 7, name: 'حدادة', icon: '🔩' },
-          { id: 8, name: 'ألومنيوم', icon: '🪟' },
-          { id: 9, name: 'صيانة أجهزة', icon: '📺' },
-          { id: 10, name: 'تنظيف', icon: '🧹' },
-        ]);
-      }
-    };
-    loadCrafts();
-  }, []);
-
   // ========== Load Craftsman Data ==========
   useEffect(() => {
     const loadCraftsman = async () => {
@@ -114,30 +86,7 @@ const BookingPage = () => {
         const data = await api.getCraftsman(id);
         const craftsmanData = data.craftsman || data;
 
-        let services = [];
-
-        if (craftsmanData.services && craftsmanData.services.length > 0) {
-          services = craftsmanData.services.map(s => ({
-            id: s.id || Date.now() + Math.random(),
-            name: s.name || s.title || 'خدمة',
-            price: s.price || s.cost || craftsmanData.hourly_rate || 150,
-          }));
-        } else if (craftsmanData.crafts && craftsmanData.crafts.length > 0) {
-          services = craftsmanData.crafts.map(c => ({
-            id: c.id || Date.now() + Math.random(),
-            name: c.name || c.title || 'خدمة',
-            price: craftsmanData.hourly_rate || craftsmanData.price || 150,
-          }));
-        } else {
-          services = [{
-            id: 1,
-            name: craftsmanData.profession || 'خدمة أساسية',
-            price: craftsmanData.hourly_rate || craftsmanData.price || 150,
-          }];
-        }
-
-        services = services.filter(s => s.name && s.price);
-
+        // ✅ تنسيق بيانات الحرفي
         const formattedCraftsman = {
           ...craftsmanData,
           id: craftsmanData.id || parseInt(id),
@@ -153,17 +102,11 @@ const BookingPage = () => {
           yearsExperience: craftsmanData.years_exp || craftsmanData.yearsExperience || 5,
           profession: craftsmanData.profession || craftsmanData.crafts?.[0]?.name || 'حرفي',
           bio: craftsmanData.bio || craftsmanData.description || '',
-          services: services,
         };
 
         setCraftsman(formattedCraftsman);
 
-        if (services && services.length > 0) {
-          setSelectedServiceId(services[0].id);
-        } else {
-          setSelectedServiceId('hourly');
-        }
-
+        // ✅ جلب حرفيين قريبين
         try {
           const nearbyData = await api.getNearbyCraftsmen(id, {
             lat: formattedCraftsman.latitude,
@@ -189,32 +132,7 @@ const BookingPage = () => {
           setNearbyCraftsmen(nearby);
         } catch (e) {
           console.warn('Could not load nearby craftsmen:', e);
-          setNearbyCraftsmen([
-            {
-              id: 2,
-              name: 'محمد السباك',
-              profession: 'سباك',
-              rating: 4.8,
-              city: 'القاهرة',
-              district: 'الزمالك',
-              latitude: 30.0588,
-              longitude: 31.2245,
-              distance: 2.8,
-              phone: '01001234568',
-            },
-            {
-              id: 3,
-              name: 'خالد الكهربائي',
-              profession: 'كهربائي',
-              rating: 4.7,
-              city: 'القاهرة',
-              district: 'الدقي',
-              latitude: 30.0384,
-              longitude: 31.2102,
-              distance: 3.5,
-              phone: '01001234569',
-            },
-          ]);
+          setNearbyCraftsmen([]);
         }
       } catch (error) {
         console.warn('⚠️ Using fallback craftsman data:', error);
@@ -234,39 +152,9 @@ const BookingPage = () => {
           completedJobs: 320,
           yearsExperience: 15,
           bio: 'نجار محترف خبرة 15 سنة في جميع أعمال النجارة',
-          services: [
-            { id: 1, name: 'تركيب باب', price: 300 },
-            { id: 2, name: 'تصليح دولاب', price: 200 },
-            { id: 3, name: 'أعمال نجارة عامة', price: 400 },
-          ],
-          crafts: [{ id: 1, name: 'نجار' }],
         };
         setCraftsman(fallbackData);
-        setSelectedServiceId(fallbackData.services[0].id);
-        setNearbyCraftsmen([
-          {
-            id: 2,
-            name: 'محمد السباك',
-            profession: 'سباك',
-            rating: 4.8,
-            city: 'القاهرة',
-            district: 'الزمالك',
-            latitude: 30.0588,
-            longitude: 31.2245,
-            distance: 2.8,
-          },
-          {
-            id: 3,
-            name: 'خالد الكهربائي',
-            profession: 'كهربائي',
-            rating: 4.7,
-            city: 'القاهرة',
-            district: 'الدقي',
-            latitude: 30.0384,
-            longitude: 31.2102,
-            distance: 3.5,
-          },
-        ]);
+        setNearbyCraftsmen([]);
       }
       setLoading(false);
     };
@@ -274,25 +162,7 @@ const BookingPage = () => {
   }, [id, userLocation]);
 
   // ========== Calculate Price ==========
-  const getServicePrice = () => {
-    // ✅ لو اختار مهنة (craft)
-    if (selectedCraft) {
-      return craftsman?.hourly_rate || craftsman?.price || 150;
-    }
-
-    if (selectedServiceId === 'hourly') {
-      return craftsman?.hourly_rate || craftsman?.price || 150;
-    }
-
-    if (selectedServiceId && craftsman?.services) {
-      const selectedService = craftsman.services.find(s => s.id === selectedServiceId);
-      if (selectedService) return selectedService.price;
-    }
-
-    return craftsman?.hourly_rate || craftsman?.price || 150;
-  };
-
-  const price = getServicePrice();
+  const price = craftsman?.hourly_rate || craftsman?.price || 150;
   const platformFee = Math.round(price * 0.1);
   const total = price + platformFee;
   const today = new Date().toISOString().split('T')[0];
@@ -300,22 +170,6 @@ const BookingPage = () => {
   // ============================================================
   // ✅ دوال رفع الصور
   // ============================================================
-
-  const uploadImage = async (file, type = 'post_image') => {
-    setSubmitting(true);
-    setError('');
-
-    try {
-      const data = await api.uploadImage(file, type);
-      return data;
-    } catch (error) {
-      console.error('❌ Upload error:', error);
-      setError(error.message || 'حدث خطأ في رفع الصورة');
-      return null;
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const uploadMultipleImages = async (files, type = 'post_image') => {
     setSubmitting(true);
@@ -389,8 +243,6 @@ const BookingPage = () => {
     backToHome: lang === 'ar' ? 'العودة للرئيسية' : 'Back to Home',
     selectDate: lang === 'ar' ? 'يرجى اختيار التاريخ' : 'Please select a date',
     selectTime: lang === 'ar' ? 'يرجى اختيار الوقت' : 'Please select a time',
-    selectService: lang === 'ar' ? 'اختر الخدمة المطلوبة' : 'Select Service',
-    chooseService: lang === 'ar' ? '-- اختر خدمة --' : '-- Select Service --',
     services: lang === 'ar' ? 'الخدمات المتاحة' : 'Available Services',
     hourlyRate: lang === 'ar' ? 'السعر بالساعة' : 'Hourly Rate',
     location: lang === 'ar' ? 'موقع الحرفي' : 'Craftsman Location',
@@ -409,7 +261,6 @@ const BookingPage = () => {
     details: lang === 'ar' ? 'تفاصيل الحجز' : 'Booking Details',
     location: lang === 'ar' ? 'الموقع' : 'Location',
     reviews: lang === 'ar' ? 'التقييمات' : 'Reviews',
-    serviceType: lang === 'ar' ? 'نوع الخدمة' : 'Service Type',
   };
 
   // ========== Handlers ==========
@@ -421,34 +272,48 @@ const BookingPage = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // ✅ دالة تأكيد الحجز - متوافقة مع Backend
   const handleConfirm = async () => {
     setSubmitting(true);
     setError('');
     try {
+      // ✅ بناء البيانات حسب توثيق الـ API
       const bookingData = {
         craftsman_id: parseInt(id),
         booking_date: date,
         booking_time: time,
         notes: notes || '',
-        location: `${craftsman?.city || ''} ${craftsman?.district || ''}`.trim(),
-        service_id: selectedServiceId || null,
-        craft_id: selectedCraft?.id || null,
-        price: price,
-        total: total,
+        location: `${craftsman?.city || ''} ${craftsman?.district || ''}`.trim() || 'غير محدد',
+        service_title: craftsman?.profession || 'خدمة منزلية',
       };
 
       console.log('📤 [BookingPage] Sending booking data:', bookingData);
 
+      // ✅ استدعاء API
       const data = await api.createBooking(bookingData);
       console.log('✅ [BookingPage] Booking successful:', data);
       
       setConfirmed(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      
     } catch (error) {
       console.error('❌ [BookingPage] Booking error:', error);
       
+      // ✅ عرض رسائل الخطأ من Backend
       if (error.errors) {
-        const errorMessages = Object.values(error.errors).flat().join(' | ');
+        const errorMessages = Object.entries(error.errors)
+          .map(([field, messages]) => {
+            const fieldNames = {
+              'craftsman_id': 'الحرفي',
+              'booking_date': 'التاريخ',
+              'booking_time': 'الوقت',
+              'service_title': 'عنوان الخدمة',
+              'notes': 'الملاحظات',
+              'location': 'الموقع',
+            };
+            return `${fieldNames[field] || field}: ${messages.join(', ')}`;
+          })
+          .join(' | ');
         setError(errorMessages);
       } else {
         setError(error.message || 'حدث خطأ في إنشاء الحجز');
@@ -715,62 +580,6 @@ const BookingPage = () => {
                   {lang === 'ar' ? 'اختر التاريخ والوقت' : 'Select Date & Time'}
                 </h2>
 
-                {/* ===== نوع الخدمة (قائمة منسدلة) ===== */}
-                <div style={{ marginBottom: '20px' }}>
-                  <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px' }}>
-                    <Briefcase size={14} style={{ display: 'inline', marginLeft: '6px' }} />
-                    {t.serviceType}
-                  </label>
-                  
-                  <select
-                    value={selectedCraft?.id || ''}
-                    onChange={(e) => {
-                      const craftId = e.target.value;
-                      if (craftId) {
-                        const craft = crafts.find(c => c.id === parseInt(craftId));
-                        setSelectedCraft(craft);
-                        setSelectedServiceId(null);
-                      } else {
-                        setSelectedCraft(null);
-                      }
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '14px',
-                      border: `2px solid ${borderColor}`,
-                      borderRadius: '12px',
-                      background: inputBg,
-                      color: textColor,
-                      fontFamily: "'Cairo', sans-serif",
-                      fontSize: '0.95rem',
-                      textAlign: lang === 'ar' ? 'right' : 'left',
-                      appearance: 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <option value="">{lang === 'ar' ? '-- اختر نوع الخدمة --' : '-- Select Service Type --'}</option>
-                    
-                    {crafts.map(craft => (
-                      <option key={craft.id} value={craft.id}>
-                        {craft.icon || '🔧'} {craft.name}
-                      </option>
-                    ))}
-                  </select>
-                  
-                  {selectedCraft && (
-                    <p style={{ 
-                      fontSize: '0.8rem', 
-                      color: '#059669', 
-                      marginTop: '6px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}>
-                      ✅ {lang === 'ar' ? 'تم الاختيار:' : 'Selected:'} {selectedCraft.name}
-                    </p>
-                  )}
-                </div>
-
                 {/* ===== Price Display ===== */}
                 <div style={{ marginBottom: '20px' }}>
                   <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px' }}>
@@ -792,24 +601,9 @@ const BookingPage = () => {
                     fontFamily: "'Cairo', sans-serif",
                   }}>
                     <span>{price} {t.egp}</span>
-                    
-                    {selectedCraft && (
-                      <span style={{ fontSize: '0.8rem', fontWeight: 400, color: textSecondary }}>
-                        ({selectedCraft.name})
-                      </span>
-                    )}
-                    
-                    {selectedServiceId && selectedServiceId !== 'hourly' && craftsman?.services && !selectedCraft && (
-                      <span style={{ fontSize: '0.8rem', fontWeight: 400, color: textSecondary }}>
-                        ({craftsman.services.find(s => s.id === selectedServiceId)?.name || ''})
-                      </span>
-                    )}
-                    
-                    {selectedServiceId === 'hourly' && !selectedCraft && (
-                      <span style={{ fontSize: '0.8rem', fontWeight: 400, color: textSecondary }}>
-                        ({lang === 'ar' ? 'الساعة' : 'per hour'})
-                      </span>
-                    )}
+                    <span style={{ fontSize: '0.8rem', fontWeight: 400, color: textSecondary }}>
+                      ({t.hourlyRate})
+                    </span>
                   </div>
                   
                   <div style={{
@@ -843,7 +637,7 @@ const BookingPage = () => {
                 <div style={{ marginBottom: '20px' }}>
                   <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px' }}>
                     <Calendar size={14} style={{ display: 'inline', marginLeft: '6px' }} />
-                    {t.date}
+                    {t.date} <span style={{ color: '#dc2626' }}>*</span>
                   </label>
                   <input 
                     type="date" 
@@ -873,7 +667,7 @@ const BookingPage = () => {
                 <div style={{ marginBottom: '20px' }}>
                   <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '12px' }}>
                     <Clock size={14} style={{ display: 'inline', marginLeft: '6px' }} />
-                    {t.time}
+                    {t.time} <span style={{ color: '#dc2626' }}>*</span>
                   </label>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '8px' }}>
                     {timeSlots.map(slot => (
@@ -1080,45 +874,6 @@ const BookingPage = () => {
                 {lang === 'ar' ? 'ملخص السعر' : 'Price Summary'}
               </h3>
               
-              {selectedCraft && (
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  padding: '8px 0', 
-                  color: textSecondary,
-                  fontSize: '0.85rem',
-                }}>
-                  <span>{selectedCraft.name}</span>
-                  <span>{price} {t.egp}</span>
-                </div>
-              )}
-
-              {selectedServiceId && selectedServiceId !== 'hourly' && craftsman?.services && !selectedCraft && (
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  padding: '8px 0', 
-                  color: textSecondary,
-                  fontSize: '0.85rem',
-                }}>
-                  <span>{craftsman.services.find(s => s.id === selectedServiceId)?.name || t.servicePrice}</span>
-                  <span>{craftsman.services.find(s => s.id === selectedServiceId)?.price || price} {t.egp}</span>
-                </div>
-              )}
-
-              {selectedServiceId === 'hourly' && !selectedCraft && (
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  padding: '8px 0', 
-                  color: textSecondary,
-                  fontSize: '0.85rem',
-                }}>
-                  <span>{t.hourlyRate}</span>
-                  <span>{price} {t.egp}</span>
-                </div>
-              )}
-              
               <div style={{ 
                 display: 'flex', 
                 justifyContent: 'space-between', 
@@ -1126,7 +881,7 @@ const BookingPage = () => {
                 color: textSecondary,
                 fontSize: '0.85rem',
               }}>
-                <span>{t.servicePrice}</span>
+                <span>{t.hourlyRate}</span>
                 <span>{price} {t.egp}</span>
               </div>
               

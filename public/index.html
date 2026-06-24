@@ -3,47 +3,39 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#0d6efd">
-  <meta name="description" content="طلب صناعي - منصة ربط العملاء بالحرفيين المهرة في جميع التخصصات">
+  
+  <!-- ✅ بيانات موحدة -->
+  <meta name="theme-color" content="#2563eb">
+  <meta name="description" content="اطلب صنايعي - منصة ربط العملاء بالحرفيين المهرة">
+  
+  <!-- ✅ PWA -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="طلب صناعي">
-  <link rel="apple-touch-icon" href="/icon.svg">
-
-<link rel="icon" href="https://media.base44.com/images/public/69fe164377b5863c8dd3dec6/fc75a8784_logo.png" type="image/png">
-<meta name="theme-color" content="#1d4ed8">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="صنايعي">
-<meta name="mobile-web-app-capable" content="yes">
-<link rel="manifest" href="/manifest.json">  <script type="text/javascript">
-  function googleTranslateElementInit() {
-    new google.translate.TranslateElement({
-      pageLanguage: 'ar',
-      includedLanguages: 'ar,en',
-      layout: google.translate.TranslateElement.InlineLayout.SIMPLE
-    }, 'google_translate_element');
-  }
-</script>
-<script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
-  <title>اطلب صناعي - منصة ربط العملاء بالحرفيين</title>
+  <meta name="apple-mobile-web-app-title" content="صنايعي">
+  <meta name="mobile-web-app-capable" content="yes">
   
+  <!-- ✅ أيقونات محلية -->
+  <link rel="apple-touch-icon" href="/favicon.ico">
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <link rel="manifest" href="/manifest.json">
+  
+  <!-- ✅ خط Cairo -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <title>اطلب صنايعي - منصة ربط العملاء بالحرفيين</title>
 </head>
 <body>
-  <script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/service-worker.js');
-    });
-  }
-</script>
   <div id="root"></div>
+  
+  <!-- ✅ Service Worker مرة واحدة -->
   <script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/service-worker.js');
-    });
-  }
-</script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js');
+      });
+    }
+  </script>
 </body>
 </html>

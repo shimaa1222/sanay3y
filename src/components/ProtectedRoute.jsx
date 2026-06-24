@@ -3,64 +3,61 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-/**
- * مكون لحماية المسارات
- * @param {Object} props
- * @param {React.ReactNode} props.children - الصفحة المراد حمايتها
- * @param {string} props.requiredRole - الدور المطلوب (client, craftsman)
- * @param {string} props.redirectTo - مسار إعادة التوجيه الافتراضي (اختياري)
- */
 const ProtectedRoute = ({ 
   children, 
   requiredRole, 
-  redirectTo = '/' 
+  redirectTo = '/',
+  allowedRoles = [],
 }) => {
   const { isAuthenticated, user, loading } = useAuth();
   const location = useLocation();
 
-  // ✅ حالة 1: جاري تحميل بيانات المستخدم
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900" dir="rtl">
-        <div className="flex flex-col items-center gap-4">
-          {/* Spinner */}
-          <div className="relative">
-            <div className="w-16 h-16 border-4 border-gray-200 dark:border-gray-700 border-t-primary rounded-full animate-spin"></div>
-          </div>
-          <p className="text-gray-600 dark:text-gray-400 text-sm font-medium">
-            جاري التحقق من بياناتك...
-          </p>
-        </div>
+  const Loader = () => (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900" dir="rtl">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-16 h-16 border-4 border-gray-200 dark:border-gray-700 border-t-blue-600 rounded-full animate-spin"></div>
+        <p className="text-gray-600 dark:text-gray-400 text-sm font-medium">
+          جاري التحقق من بياناتك...
+        </p>
       </div>
-    );
+    </div>
+  );
+
+  if (loading) {
+    return <Loader />;
   }
 
-  // ✅ حالة 2: مش مسجل دخول → يروح للـ login مع حفظ المسار
   if (!isAuthenticated || !user) {
-    return (
-      <Navigate 
-        to="/login" 
-        replace 
-        state={{ from: location }} 
-      />
-    );
+    return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  // ✅ حالة 3: مطلوب دور معين والمستخدم مش من هذا الدور
+  if (allowedRoles.length > 0) {
+    const isAllowed = allowedRoles.includes(user.role);
+    if (!isAllowed) {
+      return <Navigate to={getRedirectPath(user.role)} replace />;
+    }
+  }
+
   if (requiredRole && user.role !== requiredRole) {
-    // توجيه ذكي حسب دور المستخدم الفعلي
-    const redirectMap = {
-      'client': '/customer/home',
-      'craftsman': '/craftsman/home',
-      'admin': '/admin/dashboard',
-    };
-
-    const targetPath = redirectMap[user.role] || redirectTo;
-    return <Navigate to={targetPath} replace />;
+    return <Navigate to={getRedirectPath(user.role)} replace />;
   }
 
-  // ✅ حالة 4: مصرح له بالكامل → يظهر الصفحة
+  if (user.is_active === false) {
+    return <Navigate to="/account-suspended" replace state={{ from: location }} />;
+  }
+
   return children;
+};
+
+const getRedirectPath = (role) => {
+  const redirectMap = {
+    'client': '/customer/home',
+    'customer': '/customer/home',
+    'craftsman': '/craftsman/home',
+    'admin': '/admin/dashboard',
+    'super_admin': '/admin/dashboard',
+  };
+  return redirectMap[role] || '/';
 };
 
 export default ProtectedRoute;

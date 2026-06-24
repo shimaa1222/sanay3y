@@ -7,7 +7,8 @@ import api from '../services/api';
 import VoiceSearch from '../components/Search/VoiceSearch';
 import { 
   Search, Star, Clock, Sparkles, User, ChevronRight,
-  FileText, Mic, Award, Users, CheckCircle, X, Loader
+  FileText, Mic, Award, Users, CheckCircle, X, Loader,
+  Calendar, MapPin, DollarSign, Bell, MessageSquare
 } from 'lucide-react';
 
 const CustomerHomePage = () => {
@@ -23,7 +24,14 @@ const CustomerHomePage = () => {
   const [showVoice, setShowVoice] = useState(false);
   const [activeCategory, setActiveCategory] = useState('all');
   const [stats, setStats] = useState({ total: 0, avgRating: 0, totalJobs: 0 });
+  
+  // ✅ قسم الحجوزات (Bookings)
   const [recentBookings, setRecentBookings] = useState([]);
+  const [bookingsLoading, setBookingsLoading] = useState(true);
+  
+  // ✅ قسم طلباتي (Service Posts)
+  const [myPosts, setMyPosts] = useState([]);
+  const [postsLoading, setPostsLoading] = useState(true);
 
   // ✅ Language
   useEffect(() => {
@@ -62,13 +70,11 @@ const CustomerHomePage = () => {
         totalJobs: list.reduce((s, c) => s + (c.completed_bookings || c.completed_jobs || 0), 0),
       });
       
-      // 4. جلب حجوزات العميل الأخيرة
-      try {
-        const bookingsData = await api.getMyBookings('past');
-        setRecentBookings(bookingsData.bookings?.data?.slice(0, 3) || []);
-      } catch {
-        // تجاهل خطأ الحجوزات
-      }
+      // ✅ 4. جلب حجوزات العميل (Bookings)
+      await loadBookings();
+      
+      // ✅ 5. جلب طلباتي (Service Posts)
+      await loadMyPosts();
       
     } catch (error) {
       console.error('Error loading customer data:', error);
@@ -93,6 +99,34 @@ const CustomerHomePage = () => {
     }
     
     setLoading(false);
+  };
+
+  // ✅ جلب حجوزات العميل (Bookings)
+  const loadBookings = async () => {
+    setBookingsLoading(true);
+    try {
+      const bookingsData = await api.getMyBookings('all');
+      setRecentBookings(bookingsData.bookings?.data?.slice(0, 3) || []);
+    } catch (error) {
+      console.warn('Could not load bookings:', error);
+      setRecentBookings([]);
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
+
+  // ✅ جلب طلباتي (Service Posts)
+  const loadMyPosts = async () => {
+    setPostsLoading(true);
+    try {
+      const postsData = await api.getMyPosts();
+      setMyPosts(postsData.posts?.data?.slice(0, 3) || []);
+    } catch (error) {
+      console.warn('Could not load my posts:', error);
+      setMyPosts([]);
+    } finally {
+      setPostsLoading(false);
+    }
   };
 
   const handleSearch = () => {
@@ -165,6 +199,31 @@ const CustomerHomePage = () => {
     return map[status] || status;
   };
 
+  // ✅ تنسيق حالة المنشور
+  const getPostStatusText = (status) => {
+    const map = {
+      open: lang === 'ar' ? 'مفتوح' : 'Open',
+      closed: lang === 'ar' ? 'مغلق' : 'Closed',
+    };
+    return map[status] || status;
+  };
+
+  const getPostStatusColor = (status) => {
+    const colors = {
+      open: '#dbeafe',
+      closed: '#d1fae5',
+    };
+    return colors[status] || colors.open;
+  };
+
+  const getPostStatusTextColor = (status) => {
+    const colors = {
+      open: '#2563eb',
+      closed: '#059669',
+    };
+    return colors[status] || colors.open;
+  };
+
   // Translations
   const t = {
     welcome: lang === 'ar' ? 'مرحباً' : 'Welcome',
@@ -177,12 +236,19 @@ const CustomerHomePage = () => {
     featuredCraftsmen: lang === 'ar' ? 'حرفيون مميزون' : 'Featured Craftsmen',
     noResults: lang === 'ar' ? 'لا يوجد حرفيين' : 'No craftsmen found',
     loading: lang === 'ar' ? 'جاري التحميل...' : 'Loading...',
-    recentRequests: lang === 'ar' ? 'حجوزاتك الأخيرة' : 'Your Recent Bookings',
+    recentBookings: lang === 'ar' ? 'حجوزاتك الأخيرة' : 'Your Recent Bookings',
+    myRequests: lang === 'ar' ? 'طلباتي' : 'My Requests',
     viewAll: lang === 'ar' ? 'عرض الكل' : 'View All',
     egp: lang === 'ar' ? 'ج.م' : 'EGP',
     pending: lang === 'ar' ? 'قيد الانتظار' : 'Pending',
     completed: lang === 'ar' ? 'مكتمل' : 'Completed',
     specialties: lang === 'ar' ? 'التخصصات' : 'Specialties',
+    noBookings: lang === 'ar' ? 'لا توجد حجوزات' : 'No bookings',
+    noPosts: lang === 'ar' ? 'لا توجد طلبات' : 'No requests',
+    viewAllBookings: lang === 'ar' ? 'عرض كل الحجوزات' : 'View All Bookings',
+    viewAllRequests: lang === 'ar' ? 'عرض كل الطلبات' : 'View All Requests',
+    status: lang === 'ar' ? 'الحالة' : 'Status',
+    budget: lang === 'ar' ? 'الميزانية' : 'Budget',
   };
 
   // Dynamic colors
@@ -279,12 +345,14 @@ const CustomerHomePage = () => {
       {/* Main Content */}
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
         
-        {/* Recent Bookings - مع زر "عرض الكل" */}
+        {/* ============================================================
+             ✅ قسم حجوزاتي (Bookings)
+             ============================================================ */}
         <div className="animate-fade-in-up" style={{ marginBottom: '32px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: textColor, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Clock size={20} style={{ color: '#3b82f6' }} />
-              {t.recentRequests}
+              <Calendar size={20} style={{ color: '#3b82f6' }} />
+              {t.recentBookings}
             </h2>
             <Link 
               to="/my-bookings" 
@@ -298,40 +366,171 @@ const CustomerHomePage = () => {
                 gap: '4px',
               }}
             >
-              {t.viewAll}
+              {t.viewAllBookings}
               <ChevronRight size={16} />
             </Link>
           </div>
 
-          {recentBookings.length > 0 ? (
+          {bookingsLoading ? (
             <div style={{ display: 'flex', gap: '12px', overflowX: 'auto' }}>
-              {recentBookings.map((req, i) => (
-                <div key={i} style={{ background: cardBg, borderRadius: '14px', padding: '16px', border: `1px solid ${borderColor}`, minWidth: '250px', flexShrink: 0 }}>
+              {[1, 2, 3].map(i => (
+                <div key={i} className="skeleton" style={{ borderRadius: '14px', minWidth: '250px', height: '80px', flexShrink: 0 }} />
+              ))}
+            </div>
+          ) : recentBookings.length > 0 ? (
+            <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '4px' }}>
+              {recentBookings.map((booking, i) => (
+                <div 
+                  key={i} 
+                  className="hover-lift" 
+                  style={{ 
+                    background: cardBg, 
+                    borderRadius: '14px', 
+                    padding: '16px', 
+                    border: `1px solid ${borderColor}`, 
+                    minWidth: '250px', 
+                    flexShrink: 0,
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => navigate(`/booking/${booking.id}`)}
+                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                     <span style={{ fontWeight: 600, color: textColor, fontSize: '0.9rem' }}>
-                      {req.craftsman?.first_name} {req.craftsman?.last_name || req.service?.title || req.service_title || 'خدمة'}
+                      {booking.craftsman?.first_name} {booking.craftsman?.last_name || booking.service_title || 'خدمة'}
                     </span>
                     <span style={{ 
                       padding: '2px 10px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 600, 
-                      background: getStatusColor(req.status), 
-                      color: getStatusTextColor(req.status) 
+                      background: getStatusColor(booking.status), 
+                      color: getStatusTextColor(booking.status) 
                     }}>
-                      {getStatusText(req.status)}
+                      {getStatusText(booking.status)}
                     </span>
                   </div>
                   <div style={{ fontSize: '0.8rem', color: textSecondary }}>
-                    {req.total_price && <span>{req.total_price} {t.egp}</span>}
-                    {req.booking_date && <span> • {req.booking_date}</span>}
-                    {req.booking_time && <span> • {req.booking_time}</span>}
+                    {booking.total_price && <span>{booking.total_price} {t.egp}</span>}
+                    {booking.booking_date && <span> • {booking.booking_date}</span>}
+                    {booking.booking_time && <span> • {booking.booking_time}</span>}
                   </div>
                 </div>
               ))}
             </div>
           ) : (
             <div style={{ background: cardBg, borderRadius: '14px', padding: '24px', textAlign: 'center', border: `1px solid ${borderColor}` }}>
+              <Calendar size={32} style={{ opacity: 0.3, margin: '0 auto 8px', display: 'block', color: textSecondary }} />
               <p style={{ color: textSecondary, fontSize: '0.9rem' }}>
-                {lang === 'ar' ? 'لا توجد حجوزات حالية' : 'No bookings yet'}
+                {t.noBookings}
               </p>
+              <Link 
+                to="/search" 
+                style={{ 
+                  display: 'inline-block', 
+                  marginTop: '8px', 
+                  color: '#3b82f6', 
+                  fontSize: '0.85rem', 
+                  fontWeight: 600, 
+                  textDecoration: 'none' 
+                }}
+              >
+                {t.browseCraftsmen}
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {/* ============================================================
+             ✅ قسم طلباتي (Service Posts)
+             ============================================================ */}
+        <div className="animate-fade-in-up delay-100" style={{ marginBottom: '32px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: textColor, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <FileText size={20} style={{ color: '#8b5cf6' }} />
+              {t.myRequests}
+            </h2>
+            <Link 
+              to="/my-requests" 
+              style={{ 
+                color: '#8b5cf6', 
+                fontSize: '0.85rem', 
+                fontWeight: 600, 
+                textDecoration: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              {t.viewAllRequests}
+              <ChevronRight size={16} />
+            </Link>
+          </div>
+
+          {postsLoading ? (
+            <div style={{ display: 'flex', gap: '12px', overflowX: 'auto' }}>
+              {[1, 2, 3].map(i => (
+                <div key={i} className="skeleton" style={{ borderRadius: '14px', minWidth: '250px', height: '80px', flexShrink: 0 }} />
+              ))}
+            </div>
+          ) : myPosts.length > 0 ? (
+            <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '4px' }}>
+              {myPosts.map((post, i) => (
+                <div 
+                  key={i} 
+                  className="hover-lift" 
+                  style={{ 
+                    background: cardBg, 
+                    borderRadius: '14px', 
+                    padding: '16px', 
+                    border: `1px solid ${borderColor}`, 
+                    minWidth: '250px', 
+                    flexShrink: 0,
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => navigate(`/service-post/${post.id}`)}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ fontWeight: 600, color: textColor, fontSize: '0.9rem' }}>
+                      {post.title || 'طلب خدمة'}
+                    </span>
+                    <span style={{ 
+                      padding: '2px 10px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 600, 
+                      background: getPostStatusColor(post.status), 
+                      color: getPostStatusTextColor(post.status) 
+                    }}>
+                      {getPostStatusText(post.status)}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: textSecondary }}>
+                    {post.budget_from && post.budget_to ? (
+                      <span>{post.budget_from} - {post.budget_to} {t.egp}</span>
+                    ) : post.budget_from && (
+                      <span>{post.budget_from} {t.egp}</span>
+                    )}
+                    {post.city && <span> • {post.city}</span>}
+                    {post.responses_count !== undefined && (
+                      <span> • {post.responses_count} {lang === 'ar' ? 'ردود' : 'responses'}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ background: cardBg, borderRadius: '14px', padding: '24px', textAlign: 'center', border: `1px solid ${borderColor}` }}>
+              <FileText size={32} style={{ opacity: 0.3, margin: '0 auto 8px', display: 'block', color: textSecondary }} />
+              <p style={{ color: textSecondary, fontSize: '0.9rem' }}>
+                {t.noPosts}
+              </p>
+              <Link 
+                to="/request-service" 
+                style={{ 
+                  display: 'inline-block', 
+                  marginTop: '8px', 
+                  color: '#8b5cf6', 
+                  fontSize: '0.85rem', 
+                  fontWeight: 600, 
+                  textDecoration: 'none' 
+                }}
+              >
+                {t.sendRequest}
+              </Link>
             </div>
           )}
         </div>

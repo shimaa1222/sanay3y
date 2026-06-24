@@ -24,13 +24,37 @@ const VerifyEmailPage = () => {
   const [userEmail, setUserEmail] = useState('');
   const codeInputRefs = useRef([]);
 
-  // Language initialization
+  // ============================================================
+  // ✅ مسح أي بيانات قديمة عند تحميل الصفحة
+  // ============================================================
+  useEffect(() => {
+    // مسح أي verified_token قديم
+    const oldToken = localStorage.getItem('verified_token');
+    if (oldToken) {
+      localStorage.removeItem('verified_token');
+    }
+    
+    // مسح user القديم لو مش مكتمل
+    const userData = JSON.parse(localStorage.getItem('user') || '{}');
+    if (userData && !userData.email_verified_at) {
+      // لو المستخدم مش متأكد، نمسحه
+    }
+  }, []);
+
+  // ============================================================
+  // 🌍 Language
+  // ============================================================
   useEffect(() => {
     const savedLang = localStorage.getItem('language') || 'ar';
     setLang(savedLang);
     
-    const email = user?.email || localStorage.getItem('pendingVerificationEmail') || 'example@email.com';
+    const email = user?.email || localStorage.getItem('pendingVerificationEmail') || '';
     setUserEmail(email);
+    
+    // لو مفيش إيميل، ارجع للتسجيل
+    if (!email) {
+      navigate('/signup/customer');
+    }
     
     const handleLanguageChange = () => {
       const currentLang = localStorage.getItem('language') || 'ar';
@@ -39,9 +63,11 @@ const VerifyEmailPage = () => {
     
     window.addEventListener('languagechange', handleLanguageChange);
     return () => window.removeEventListener('languagechange', handleLanguageChange);
-  }, [user]);
+  }, [user, navigate]);
 
-  // Auto-focus first input
+  // ============================================================
+  // 🎯 Auto-focus first input
+  // ============================================================
   useEffect(() => {
     setTimeout(() => {
       if (codeInputRefs.current[0]) {
@@ -50,7 +76,9 @@ const VerifyEmailPage = () => {
     }, 500);
   }, []);
 
-  // Resend countdown
+  // ============================================================
+  // ⏱️ Resend countdown
+  // ============================================================
   useEffect(() => {
     if (countdown > 0) {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
@@ -58,7 +86,9 @@ const VerifyEmailPage = () => {
     }
   }, [countdown]);
 
-  // Translations
+  // ============================================================
+  // 📝 Translations
+  // ============================================================
   const t = {
     title: lang === 'ar' ? 'تأكيد البريد الإلكتروني' : 'Verify Email',
     subtitle: lang === 'ar' ? 'أدخل الكود المكون من 6 أرقام المرسل إلى بريدك الإلكتروني' : 'Enter the 6-digit code sent to your email',
@@ -80,24 +110,22 @@ const VerifyEmailPage = () => {
     networkError: lang === 'ar' ? 'لا يوجد اتصال بالخادم. تأكد من اتصالك بالإنترنت.' : 'No server connection. Please check your internet.',
   };
 
-  // ✅ التحقق من OTP باستخدام api.verifyOtp (بدلاً من api.verifyEmail)
+  // ============================================================
+  // ✅ التحقق من OTP
+  // ============================================================
   const handleVerify = async (enteredCode) => {
     setIsVerifying(true);
     setError('');
 
     try {
-      // ✅ استخدام verifyOtp بدلاً من verifyEmail
       const data = await api.verifyOtp(userEmail, enteredCode, 'register');
       
-      // ✅ نجاح التحقق
       setSuccess(true);
       
-      // ✅ حفظ verified_token لو موجود
       if (data.verified_token) {
         localStorage.setItem('verified_token', data.verified_token);
       }
       
-      // ✅ تحديث حالة المستخدم في localStorage
       const userData = JSON.parse(localStorage.getItem('user') || '{}');
       userData.email_verified_at = new Date().toISOString();
       localStorage.setItem('user', JSON.stringify(userData));
@@ -127,6 +155,9 @@ const VerifyEmailPage = () => {
     }
   };
 
+  // ============================================================
+  // ⌨️ Input Handlers
+  // ============================================================
   const handleInput = (index, value) => {
     if (value && !/^[0-9]$/.test(value)) return;
     
@@ -180,7 +211,9 @@ const VerifyEmailPage = () => {
     handleVerify(enteredCode);
   };
 
-  // ✅ إعادة إرسال كود التحقق باستخدام api.sendOtp (بدلاً من api.resendVerification)
+  // ============================================================
+  // 🔄 إعادة إرسال الكود
+  // ============================================================
   const handleResend = async () => {
     if (countdown > 0) return;
     
@@ -189,7 +222,6 @@ const VerifyEmailPage = () => {
     setSuccess(false);
 
     try {
-      // ✅ استخدام sendOtp بدلاً من resendVerification
       await api.sendOtp(userEmail);
       setSuccess(t.codeSent);
       setCountdown(60);
@@ -208,7 +240,9 @@ const VerifyEmailPage = () => {
     }
   };
 
-  // Dynamic colors
+  // ============================================================
+  // 🎨 Styles
+  // ============================================================
   const bgColor = darkMode ? '#0f172a' : '#f8fafc';
   const cardBg = darkMode ? '#1e293b' : '#ffffff';
   const textColor = darkMode ? '#f1f5f9' : '#0f172a';
@@ -273,25 +307,11 @@ const VerifyEmailPage = () => {
           50% { transform: translateY(-10px); }
         }
         
-        .animate-fade-in-up {
-          animation: fadeInUp 0.5s ease forwards;
-        }
-        
-        .animate-fade-in {
-          animation: fadeIn 0.3s ease forwards;
-        }
-        
-        .animate-scale-in {
-          animation: scaleIn 0.5s ease forwards;
-        }
-        
-        .animate-shake {
-          animation: shake 0.5s ease;
-        }
-        
-        .animate-success-bounce {
-          animation: successBounce 0.6s ease forwards;
-        }
+        .animate-fade-in-up { animation: fadeInUp 0.5s ease forwards; }
+        .animate-fade-in { animation: fadeIn 0.3s ease forwards; }
+        .animate-scale-in { animation: scaleIn 0.5s ease forwards; }
+        .animate-shake { animation: shake 0.5s ease; }
+        .animate-success-bounce { animation: successBounce 0.6s ease forwards; }
         
         .code-input {
           transition: all 0.3s ease;
@@ -314,12 +334,8 @@ const VerifyEmailPage = () => {
         .delay-400 { animation-delay: 0.4s; }
         
         @media (max-width: 480px) {
-          .verify-card {
-            padding: 32px 20px !important;
-          }
-          .code-grid {
-            gap: 6px !important;
-          }
+          .verify-card { padding: 32px 20px !important; }
+          .code-grid { gap: 6px !important; }
           .code-input {
             width: 44px !important;
             height: 52px !important;

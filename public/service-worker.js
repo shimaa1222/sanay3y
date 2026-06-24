@@ -7,7 +7,7 @@ self.addEventListener('install', (event) => {
         '/',
         '/index.html',
         '/manifest.json',
-        '/icon.svg'
+        '/favicon.ico'  // ✅ بدل icon.svg
       ]);
     })
   );
