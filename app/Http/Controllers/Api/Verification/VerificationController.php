@@ -137,6 +137,86 @@ class VerificationController extends Controller
         return response()->json($response);
     }
 
+<<<<<<< HEAD
+=======
+
+
+    $record = OtpCode::where('email',$request->email)
+        ->where('code',$request->otp)
+        ->where('used',false)
+        ->where('expires_at','>',now())
+        ->latest()
+        ->first();
+
+
+
+    if(!$record){
+
+        OtpCode::where('email',$request->email)
+            ->where('used',false)
+            ->increment('attempts');
+
+
+        return response()->json([
+
+            'message'=>'الكود غير صحيح أو منتهي الصلاحية'
+
+        ],422);
+
+    }
+
+
+
+    $record->update([
+
+        'used'=>true
+
+    ]);
+
+
+
+  $response = [
+    'message'  => 'تم التحقق بنجاح',
+    'verified' => true,
+];
+
+
+if($request->purpose === 'register'){//تأكيد البريد الإلكتروني للتسجيل
+
+    $token = Str::random(64);
+
+    Cache::put(
+        "email_verification:$token",
+        $request->email,
+        now()->addMinutes(30)
+    );
+
+    $response['verified_token']=$token;
+}
+if ($request->purpose === 'password_reset') {
+
+    $resetToken = Str::random(64);
+
+    Cache::put(
+        "password_reset_otp:$resetToken",
+        $request->email,
+        now()->addMinutes(15)
+    );
+
+    return response()->json([
+        'message' => 'تم التحقق بنجاح',
+        'verified' => true,
+        'reset_token' => $resetToken,
+    ]);
+}
+return response()->json($response);
+}
+
+    // ================================================================
+    // FORGOT PASSWORD + RESET PASSWORD
+    // ================================================================
+
+>>>>>>> 1bffa7c8131be878ad1b8afd9669d65ca04fd99f
     /**
      * POST /api/auth/forgot-password
      *
