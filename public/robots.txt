@@ -1,2 +1,6 @@
+<<<<<<< HEAD
+=======
+# https://www.robotstxt.org/robotstxt.html
+>>>>>>> b2cbf5f0a4b4d3f1afe63ecf1b639602acbac4f0
 User-agent: *
 Disallow:
