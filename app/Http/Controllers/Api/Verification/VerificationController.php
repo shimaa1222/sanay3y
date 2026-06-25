@@ -24,22 +24,6 @@ class VerificationController extends Controller
 
     /**
      * POST /api/auth/otp/send
-     *
-     * إرسال OTP على الإيميل
-     *
-     * Request:
-     * {
-     *   "email": "user@example.com"
-     * }
-     *
-     * Response 200:
-     * {
-     *   "message": "تم إرسال كود التحقق على البريد الإلكتروني",
-     *   "expires_in": 300
-     * }
-     *
-     * Response 422:
-     *   { "message": "Validation Error", "errors": {...} }
      */
     public function sendOtp(Request $request): JsonResponse
     {
@@ -64,25 +48,6 @@ class VerificationController extends Controller
 
     /**
      * POST /api/auth/otp/verify
-     *
-     * التحقق من OTP
-     *
-     * Request:
-     * {
-     *   "email": "user@example.com",
-     *   "otp": "123456",
-     *   "purpose": "register"
-     * }
-     *
-     * Response 200:
-     * {
-     *   "message": "تم التحقق بنجاح",
-     *   "verified": true,
-     *   "verified_token": "abc..."    ← فقط لو purpose = register
-     * }
-     *
-     * Response 422:
-     *   { "message": "الكود غير صحيح أو منتهي الصلاحية" }
      */
     public function verifyOtp(Request $request): JsonResponse
     {
@@ -116,7 +81,7 @@ class VerificationController extends Controller
             ], 422);
         }
 
-        // ✅ حذف الكود بعد التحقق (عشان ميتستخدمش تاني)
+        // ✅ حذف الكود بعد التحقق
         $record->delete();
 
         $response = [
@@ -134,99 +99,21 @@ class VerificationController extends Controller
             $response['verified_token'] = $token;
         }
 
+        if ($request->purpose === 'password_reset') {
+            $resetToken = Str::random(64);
+            Cache::put(
+                "password_reset_otp:$resetToken",
+                $request->email,
+                now()->addMinutes(15)
+            );
+            $response['reset_token'] = $resetToken;
+        }
+
         return response()->json($response);
     }
 
-<<<<<<< HEAD
-=======
-
-
-    $record = OtpCode::where('email',$request->email)
-        ->where('code',$request->otp)
-        ->where('used',false)
-        ->where('expires_at','>',now())
-        ->latest()
-        ->first();
-
-
-
-    if(!$record){
-
-        OtpCode::where('email',$request->email)
-            ->where('used',false)
-            ->increment('attempts');
-
-
-        return response()->json([
-
-            'message'=>'الكود غير صحيح أو منتهي الصلاحية'
-
-        ],422);
-
-    }
-
-
-
-    $record->update([
-
-        'used'=>true
-
-    ]);
-
-
-
-  $response = [
-    'message'  => 'تم التحقق بنجاح',
-    'verified' => true,
-];
-
-
-if($request->purpose === 'register'){//تأكيد البريد الإلكتروني للتسجيل
-
-    $token = Str::random(64);
-
-    Cache::put(
-        "email_verification:$token",
-        $request->email,
-        now()->addMinutes(30)
-    );
-
-    $response['verified_token']=$token;
-}
-if ($request->purpose === 'password_reset') {
-
-    $resetToken = Str::random(64);
-
-    Cache::put(
-        "password_reset_otp:$resetToken",
-        $request->email,
-        now()->addMinutes(15)
-    );
-
-    return response()->json([
-        'message' => 'تم التحقق بنجاح',
-        'verified' => true,
-        'reset_token' => $resetToken,
-    ]);
-}
-return response()->json($response);
-}
-
-    // ================================================================
-    // FORGOT PASSWORD + RESET PASSWORD
-    // ================================================================
-
->>>>>>> 1bffa7c8131be878ad1b8afd9669d65ca04fd99f
     /**
      * POST /api/auth/forgot-password
-     *
-     * إرسال رابط إعادة تعيين كلمة المرور
-     *
-     * Request:
-     *   { "email": "user@example.com" }
-     *
-     * Response 200:
-     *   { "message": "إذا كان البريد مسجلاً، ستصلك تعليمات إعادة التعيين قريباً" }
      */
     public function forgotPassword(Request $request): JsonResponse
     {
@@ -243,7 +130,6 @@ return response()->json($response);
 
         $user = User::where('email', $request->email)->first();
 
-        // Security: لا تكشف هل الإيميل موجود أم لا
         if ($user) {
             $this->generateAndSendOtp($request->email);
         }
@@ -255,21 +141,6 @@ return response()->json($response);
 
     /**
      * POST /api/auth/reset-password-otp
-     *
-     * إعادة تعيين كلمة المرور بالـ reset_token من verifyOtp (للموبايل)
-     *
-     * Request:
-     * {
-     *   "reset_token": "xyz789...",
-     *   "password": "NewPass@123",
-     *   "password_confirmation": "NewPass@123"
-     * }
-     *
-     * Response 200:
-     *   { "message": "تم تغيير كلمة المرور بنجاح. يمكنك تسجيل الدخول الآن." }
-     *
-     * Response 422:
-     *   { "message": "الرابط منتهي الصلاحية. يرجى طلب كود جديد." }
      */
     public function resetPasswordWithOtp(Request $request): JsonResponse
     {
@@ -320,20 +191,11 @@ return response()->json($response);
     // PRIVATE HELPER
     // ================================================================
 
-    /**
-     * توليد OTP وإرساله
-     *
-     * @param string $email
-     * @return void
-     */
     private function generateAndSendOtp(string $email): void
     {
-        // إلغاء الأكواد القديمة غير المستخدمة
         OtpCode::where('email', $email)
             ->where('used', false)
-            ->update([
-                'used' => true
-            ]);
+            ->update(['used' => true]);
 
         $code = str_pad(
             random_int(0, 999999),
@@ -350,9 +212,6 @@ return response()->json($response);
             'attempts' => 0,
         ]);
 
-        Mail::to($email)
-            ->send(
-                new OtpMail($code)
-            );
+        Mail::to($email)->send(new OtpMail($code));
     }
 }

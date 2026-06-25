@@ -152,7 +152,6 @@ class AdminController extends Controller
    public function approveCraftsman(Request $request, int $id): JsonResponse
 {
     $craftsman = Craftsman::findOrFail($id);
-    dd($craftsman->email);
 
     if ($craftsman->status !== 'pending') {
         return response()->json([
