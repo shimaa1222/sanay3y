@@ -193,10 +193,15 @@ class VerificationController extends Controller
 
     private function generateAndSendOtp(string $email): void
     {
+        // ✅ Log: بداية العملية
+        \Log::info('📧 [OTP] 1. Starting OTP generation for: ' . $email);
+
+        // حذف الأكواد القديمة غير المستخدمة
         OtpCode::where('email', $email)
             ->where('used', false)
             ->update(['used' => true]);
 
+        // توليد كود عشوائي من 6 أرقام
         $code = str_pad(
             random_int(0, 999999),
             6,
@@ -204,6 +209,10 @@ class VerificationController extends Controller
             STR_PAD_LEFT
         );
 
+        // ✅ Log: الكود تم إنشاؤه
+        \Log::info('🔑 [OTP] 2. Code generated: ' . $code . ' for: ' . $email);
+
+        // حفظ الكود في قاعدة البيانات
         OtpCode::create([
             'email' => $email,
             'code' => $code,
@@ -212,6 +221,18 @@ class VerificationController extends Controller
             'attempts' => 0,
         ]);
 
-        Mail::to($email)->send(new OtpMail($code));
+        // ✅ Log: محاولة إرسال البريد
+        \Log::info('📤 [OTP] 3. Attempting to send email to: ' . $email);
+
+        // محاولة إرسال البريد
+        try {
+            Mail::to($email)->send(new OtpMail($code));
+            \Log::info('✅ [OTP] 4. Email sent successfully to: ' . $email);
+        } catch (\Exception $e) {
+            \Log::error('❌ [OTP] 4. Mail error: ' . $e->getMessage());
+            \Log::error('❌ [OTP] 4. Stack trace: ' . $e->getTraceAsString());
+        }
+
+        \Log::info('📧 [OTP] 5. Finished OTP generation for: ' . $email);
     }
 }
